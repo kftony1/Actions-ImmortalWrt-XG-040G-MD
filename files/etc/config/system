@@ -1,0 +1,76 @@
+config system
+        option hostname 'NOKIA'
+        option timezone 'Asia/Shanghai'
+        option zonename 'Asia/Shanghai'
+        option ttylogin '0'
+        option log_size '64'
+        option urandom_seed '0'
+
+config timeserver 'ntp'
+        option enabled '1'
+        option enable_server '0'
+        list server 'ntp.aliyun.com'
+        list server 'ntp.tencent.com'
+        list server 'time.google.com'
+        list server 'pool.ntp.org'
+
+# ============================================
+# XG-040G-MD LED 指示灯配置（最终版）
+# DTS 定义: pwr(gpio17), pon(gpio18), los(gpio19), internet(gpio20)
+# 逻辑：PON灯=WAN链路状态，LOS灯=默认告警（断网亮红）
+# ============================================
+
+# 电源指示灯 - 常亮
+config led
+        option name 'pwr'
+        option sysfs 'green:power'
+        option trigger 'default-on'
+
+# PON 指示灯 - WAN 口链路状态（网线插好=注册成功）
+config led
+        option name 'pon'
+        option sysfs 'green:pon'
+        option trigger 'netdev'
+        option dev 'eth1'
+        option mode 'link'
+
+# LOS 指示灯 - 信号丢失告警（默认亮起，链路接通时熄灭）
+config led
+        option name 'los'
+        option sysfs 'red:los'
+        option trigger 'netdev'
+        option dev 'eth1'
+        option mode 'link'
+        option default '1'
+
+# Internet 指示灯 - LAN 数据传输活动
+config led
+        option name 'internet'
+        option sysfs 'green:internet'
+        option trigger 'netdev'
+        option dev 'br-lan'
+        option mode 'tx rx'
+
+# LAN2 口指示灯 - 连接状态
+config led
+        option name 'lan2'
+        option sysfs 'green:lan2'
+        option trigger 'netdev'
+        option dev 'lan2'
+        option mode 'link'
+
+# LAN3 口指示灯 - 连接状态
+config led
+        option name 'lan3'
+        option sysfs 'green:lan3'
+        option trigger 'netdev'
+        option dev 'lan3'
+        option mode 'link'
+
+# LAN4 口指示灯 - 连接状态
+config led
+        option name 'lan4'
+        option sysfs 'green:lan4'
+        option trigger 'netdev'
+        option dev 'lan4'
+        option mode 'link'
