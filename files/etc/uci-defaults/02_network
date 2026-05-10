@@ -25,6 +25,20 @@ an7581_setup_interfaces()
 board_config_update
 board=$(board_name)
 an7581_setup_interfaces $board
+
+# ============================================
+# 自定义配置：设置固定 IP 192.168.2.1
+# ============================================
+uci set network.lan.ipaddr='192.168.2.1'
+uci set network.lan.netmask='255.255.255.0'
+uci set network.lan.ip6assign='60'
+
+# 可选：设置网关和 DNS（如果需要）
+# uci set network.lan.gateway='192.168.2.1'
+# uci set network.lan.dns='114.114.114.114'
+
+uci commit network
+
 board_config_flush
 
 exit 0
