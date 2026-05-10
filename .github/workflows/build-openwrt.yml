@@ -23,7 +23,7 @@ on:
 
 env:
   REPO_URL: https://github.com/openwrt/openwrt
-  REPO_BRANCH: openwrt-25.12
+  REPO_BRANCH: v25.12.3  # 改为 tag 名称，锁定 25.12.3 版本
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: .config
   DIY_P1_SH: diy-part1.sh
@@ -110,7 +110,7 @@ jobs:
       uses: klever1988/cachewrtbuild@main
       with:
         ccache: 'true'
-        mixkey: 'openwrt-25.12-xg040gmd'
+        mixkey: 'openwrt-v25.12.3-xg040gmd'  # 更新 mixkey 以匹配新版本
         prefix: ${{ github.workspace }}/openwrt
 
     - name: Load custom feeds
@@ -192,10 +192,12 @@ jobs:
       id: tag
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
-        echo "release_tag=OpenWrt-25.12-XG-040G-MD-$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
-        echo "OpenWrt 25.12 稳定版固件" > release.txt
+        echo "release_tag=OpenWrt-25.12.3-XG-040G-MD-$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
+        echo "OpenWrt 25.12.3 稳定版固件" > release.txt
         echo "编译时间: $(date '+%Y-%m-%d %H:%M:%S')" >> release.txt
-        echo "源码分支: ${{ env.REPO_BRANCH }}" >> release.txt
+        echo "源码版本: ${{ env.REPO_BRANCH }}" >> release.txt
+        echo "内核版本: 6.12.85" >> release.txt
+        echo "包含 CVE-2026-31431 (Copy Fail) 高危漏洞修复" >> release.txt
         echo "状态: success" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
 
