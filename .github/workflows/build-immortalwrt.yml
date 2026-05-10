@@ -114,11 +114,48 @@ jobs:
 
     - name: Load custom configuration
       run: |
-        [ -e files ] && mv files openwrt/files
+        [ -e files ] && cp -r files openwrt/
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
+
+    - name: Verify patches
+      run: |
+        cd openwrt
+        echo "=========================================="
+        echo "验证补丁状态"
+        echo "=========================================="
+        echo ""
+        echo "=== 检查复旦微 SPI-NAND 补丁 ==="
+        if [ -f target/linux/generic/pending-6.6/640-spinand-add-fmsh-support.patch ]; then
+          echo "✅ 复旦微补丁已找到"
+          ls -la target/linux/generic/pending-6.6/640-spinand-add-fmsh-support.patch
+        elif [ -f target/linux/generic/pending-6.12/640-spinand-add-fmsh-support.patch ]; then
+          echo "✅ 复旦微补丁已找到 (6.12)"
+          ls -la target/linux/generic/pending-6.12/640-spinand-add-fmsh-support.patch
+        else
+          echo "❌ 警告: 复旦微补丁未找到"
+          echo "请检查 diy-part1.sh 是否正确执行"
+        fi
+        echo ""
+        echo "=== 检查设备补丁 (XG-040G-MD) ==="
+        if grep -r "XG-040G" target/linux/ 2>/dev/null | head -3; then
+          echo "✅ 设备补丁已找到"
+        else
+          echo "⚠️ 设备补丁状态未知: 未找到 XG-040G 相关文件"
+        fi
+        echo ""
+        echo "=== 检查内核版本 ==="
+        if [ -f include/kernel-version.mk ]; then
+          grep "LINUX_VERSION" include/kernel-version.mk | head -3
+        else
+          echo "无法确定内核版本"
+        fi
+        echo ""
+        echo "=== pending 目录内容 ==="
+        ls -la target/linux/generic/pending-*/ 2>/dev/null | head -20 || echo "目录不存在"
+        echo "=========================================="
 
     - name: SSH connection to Actions
       uses: P3TERX/ssh2actions@v1.0.0
