@@ -1,3 +1,4 @@
+#
 # Copyright (c) 2019-2020 P3TERX <https://p3terx.com>
 #
 # This is free software, licensed under the MIT License.
@@ -7,7 +8,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 
-name: Build openwrt
+name: Build OpenWrt
 
 on:
   repository_dispatch:
@@ -23,7 +24,7 @@ on:
 
 env:
   REPO_URL: https://github.com/openwrt/openwrt
-  REPO_BRANCH: v25.12.3  # 改为 tag 名称，锁定 25.12.3 版本
+  REPO_BRANCH: v25.12.3
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: .config
   DIY_P1_SH: diy-part1.sh
@@ -87,30 +88,18 @@ jobs:
         df -hT $PWD
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
-        # 解压 XG-040G-MD 设备配置（如果存在且需要）
         if [ -f "$GITHUB_WORKSPACE/XG-040G-MD.tar.gz" ]; then
           tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz -C /workdir/openwrt
-          echo "已应用 XG-040G-MD 自定义配置"
+          echo "✅ 已应用 XG-040G-MD 自定义配置"
         else
-          echo "未找到 XG-040G-MD.tar.gz，将使用官方默认配置"
-        fi
-
-    - name: Check device support
-      working-directory: /workdir/openwrt
-      run: |
-        echo "检查 OpenWrt $REPO_BRANCH 对设备的支持情况..."
-        if grep -r "XG-040G" target/linux/ 2>/dev/null; then
-          echo "✓ XG-040G-MD 已被官方支持"
-        else
-          echo "⚠ 警告: XG-040G-MD 不在官方支持列表中"
-          echo "请确保自定义补丁已正确配置"
+          echo "⚠️ 未找到 XG-040G-MD.tar.gz，将使用官方默认配置"
         fi
 
     - name: Enable build ccache
       uses: klever1988/cachewrtbuild@main
       with:
         ccache: 'true'
-        mixkey: 'openwrt-v25.12.3-xg040gmd'  # 更新 mixkey 以匹配新版本
+        mixkey: 'openwrt-v25.12.3-xg040gmd'
         prefix: ${{ github.workspace }}/openwrt
 
     - name: Load custom feeds
@@ -119,7 +108,41 @@ jobs:
         chmod +x $DIY_P1_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
-   
+
+    - name: Verify patches
+      run: |
+        cd openwrt
+        echo "=========================================="
+        echo "验证补丁状态"
+        echo "=========================================="
+        echo ""
+        echo "=== 检查复旦微 SPI-NAND 补丁 ==="
+        if [ -f target/linux/generic/pending-6.12/640-spinand-add-fmsh-support.patch ]; then
+          echo "✅ 复旦微补丁已找到"
+          ls -la target/linux/generic/pending-6.12/640-spinand-add-fmsh-support.patch
+        else
+          echo "❌ 警告: 复旦微补丁未找到"
+          echo "请检查 diy-part1.sh 是否正确执行"
+        fi
+        echo ""
+        echo "=== 检查设备补丁 (XG-040G-MD) ==="
+        if grep -r "XG-040G" target/linux/ 2>/dev/null | head -3; then
+          echo "✅ 设备补丁已找到"
+        else
+          echo "⚠️ 设备补丁状态未知: 未找到 XG-040G 相关文件"
+        fi
+        echo ""
+        echo "=== 检查内核版本 ==="
+        if [ -f include/kernel-version.mk ]; then
+          grep "LINUX_VERSION" include/kernel-version.mk | head -3
+        else
+          echo "无法确定内核版本"
+        fi
+        echo ""
+        echo "=== pending-6.12 目录内容 ==="
+        ls -la target/linux/generic/pending-6.12/ 2>/dev/null || echo "目录不存在"
+        echo "=========================================="
+
     - name: Update feeds
       run: cd openwrt && ./scripts/feeds update -a
 
@@ -197,7 +220,7 @@ jobs:
         echo "编译时间: $(date '+%Y-%m-%d %H:%M:%S')" >> release.txt
         echo "源码版本: ${{ env.REPO_BRANCH }}" >> release.txt
         echo "内核版本: 6.12.85" >> release.txt
-        echo "包含 CVE-2026-31431 (Copy Fail) 高危漏洞修复" >> release.txt
+        echo "复旦微 FM25G02B/FM25G02B13 SPI-NAND 闪存支持" >> release.txt
         echo "状态: success" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
 
