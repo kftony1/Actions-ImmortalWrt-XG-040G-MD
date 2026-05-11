@@ -119,12 +119,12 @@ jobs:
         echo "=========================================="
         echo ""
         echo "=== 检查复旦微 SPI-NAND 补丁 ==="
-        if [ -f target/linux/generic/pending-6.12/435-v6.19-mtd-spinand-add-support-for-FudanMicro-FM25S01BI3.patch ]; then
+        if [ -f target/linux/generic/pending-6.6/641-mtd-spinand-add-fm25g02b.patch ]; then
+          echo "✅ 复旦微 FM25G02B 补丁已找到"
+          ls -la target/linux/generic/pending-6.6/641-mtd-spinand-add-fm25g02b.patch
+        elif [ -f target/linux/generic/backport-6.6/435-v6.19-mtd-spinand-add-support-for-FudanMicro-FM25S01BI3.patch ]; then
           echo "✅ 复旦微 FM25S01BI3 补丁已找到"
-          ls -la target/linux/generic/pending-6.12/435-v6.19-mtd-spinand-add-support-for-FudanMicro-FM25S01BI3.patch
-        elif [ -f target/linux/generic/pending-6.12/640-spinand-add-fmsh-support.patch ]; then
-          echo "✅ 复旦微补丁已找到 (640)"
-          ls -la target/linux/generic/pending-6.12/640-spinand-add-fmsh-support.patch
+          ls -la target/linux/generic/backport-6.6/435-v6.19-mtd-spinand-add-support-for-FudanMicro-FM25S01BI3.patch
         else
           echo "⚠️ 警告: 复旦微补丁未找到"
         fi
@@ -143,8 +143,8 @@ jobs:
           echo "无法确定内核版本"
         fi
         echo ""
-        echo "=== pending-6.12 目录内容 ==="
-        ls -la target/linux/generic/pending-6.12/ 2>/dev/null || echo "目录不存在"
+        echo "=== pending-6.6 目录内容 ==="
+        ls -la target/linux/generic/pending-6.6/ 2>/dev/null || echo "目录不存在"
         echo "=========================================="
 
     - name: Update feeds
@@ -223,7 +223,7 @@ jobs:
         echo "OpenWrt 快照版固件" > release.txt
         echo "编译时间: $(date '+%Y-%m-%d %H:%M:%S')" >> release.txt
         echo "源码分支: ${{ env.REPO_BRANCH }}" >> release.txt
-        echo "复旦微 FM25S01BI3 SPI-NAND 闪存支持" >> release.txt
+        echo "复旦微 FM25S01BI3 + FM25G02B SPI-NAND 闪存支持" >> release.txt
         echo "状态: success" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
 
