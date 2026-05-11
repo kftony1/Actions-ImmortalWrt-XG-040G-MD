@@ -24,7 +24,7 @@ on:
 
 env:
   REPO_URL: https://github.com/openwrt/openwrt
-  REPO_BRANCH: v25.12.3
+  REPO_BRANCH: main
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: .config
   DIY_P1_SH: diy-part1.sh
@@ -101,7 +101,7 @@ jobs:
       uses: klever1988/cachewrtbuild@main
       with:
         ccache: 'true'
-        mixkey: 'openwrt-v25.12.3-xg040gmd'
+        mixkey: 'openwrt-main-xg040gmd'
         prefix: ${{ github.workspace }}/openwrt
 
     - name: Load custom feeds
