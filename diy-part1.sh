@@ -11,9 +11,12 @@ cd openwrt
 
 # 复旦微补丁（支持 FM25G02B 和 FM25S01BI3）
 echo "=== 检查复旦微补丁 ==="
-if [ -f target/linux/generic/pending-6.12/640-spinand-add-fmsh-support.patch ]; then
-    echo "✅ 复旦微补丁已找到（包含 FM25G02B 支持）"
-    ls -la target/linux/generic/pending-6.12/640-spinand-add-fmsh-support.patch
+if [ -f target/linux/generic/pending-6.12/641-mtd-spinand-add-fm25g02b.patch ]; then
+    echo "✅ 复旦微 FM25G02B 补丁已找到"
+    ls -la target/linux/generic/pending-6.12/641-mtd-spinand-add-fm25g02b.patch
+elif [ -f target/linux/generic/backport-6.12/435-v6.19-mtd-spinand-add-support-for-FudanMicro-FM25S01BI3.patch ]; then
+    echo "✅ 复旦微 FM25S01BI3 补丁已找到"
+    ls -la target/linux/generic/backport-6.12/435-v6.19-mtd-spinand-add-support-for-FudanMicro-FM25S01BI3.patch
 else
     echo "⚠️ 警告: 复旦微补丁未找到"
     echo "请检查 XG-040G-MD.tar.gz 是否正确解压"
