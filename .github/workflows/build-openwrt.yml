@@ -119,12 +119,14 @@ jobs:
         echo "=========================================="
         echo ""
         echo "=== 检查复旦微 SPI-NAND 补丁 ==="
-        if [ -f target/linux/generic/pending-6.12/640-spinand-add-fmsh-support.patch ]; then
-          echo "✅ 复旦微补丁已找到"
+        if [ -f target/linux/generic/pending-6.12/435-v6.19-mtd-spinand-add-support-for-FudanMicro-FM25S01BI3.patch ]; then
+          echo "✅ 复旦微 FM25S01BI3 补丁已找到"
+          ls -la target/linux/generic/pending-6.12/435-v6.19-mtd-spinand-add-support-for-FudanMicro-FM25S01BI3.patch
+        elif [ -f target/linux/generic/pending-6.12/640-spinand-add-fmsh-support.patch ]; then
+          echo "✅ 复旦微补丁已找到 (640)"
           ls -la target/linux/generic/pending-6.12/640-spinand-add-fmsh-support.patch
         else
-          echo "❌ 警告: 复旦微补丁未找到"
-          echo "请检查 diy-part1.sh 是否正确执行"
+          echo "⚠️ 警告: 复旦微补丁未找到"
         fi
         echo ""
         echo "=== 检查设备补丁 (XG-040G-MD) ==="
@@ -217,12 +219,11 @@ jobs:
       id: tag
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
-        echo "release_tag=OpenWrt-25.12.3-XG-040G-MD-$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
-        echo "OpenWrt 25.12.3 稳定版固件" > release.txt
+        echo "release_tag=OpenWrt-Snapshot-XG-040G-MD-$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
+        echo "OpenWrt 快照版固件" > release.txt
         echo "编译时间: $(date '+%Y-%m-%d %H:%M:%S')" >> release.txt
-        echo "源码版本: ${{ env.REPO_BRANCH }}" >> release.txt
-        echo "内核版本: 6.12.85" >> release.txt
-        echo "复旦微 FM25G02B/FM25G02B13 SPI-NAND 闪存支持" >> release.txt
+        echo "源码分支: ${{ env.REPO_BRANCH }}" >> release.txt
+        echo "复旦微 FM25S01BI3 SPI-NAND 闪存支持" >> release.txt
         echo "状态: success" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
 
