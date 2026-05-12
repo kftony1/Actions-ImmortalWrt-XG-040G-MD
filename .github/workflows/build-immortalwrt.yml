@@ -124,25 +124,22 @@ jobs:
       run: |
         cd openwrt
         echo "=========================================="
-        echo "验证补丁状态"
+        echo "验证驱动状态"
         echo "=========================================="
         echo ""
-        echo "=== 检查复旦微 SPI-NAND 补丁 ==="
-        if [ -f target/linux/generic/pending-6.12/641-mtd-spinand-add-fm25g02b.patch ]; then
-          echo "✅ 复旦微 FM25G02B 补丁已找到"
-          ls -la target/linux/generic/pending-6.12/641-mtd-spinand-add-fm25g02b.patch
-        elif [ -f target/linux/generic/backport-6.12/435-v6.19-mtd-spinand-add-support-for-FudanMicro-FM25S01BI3.patch ]; then
-          echo "✅ 复旦微 FM25S01BI3 补丁已找到"
-          ls -la target/linux/generic/backport-6.12/435-v6.19-mtd-spinand-add-support-for-FudanMicro-FM25S01BI3.patch
+        echo "=== 检查 fmsh.c 驱动 ==="
+        if [ -f drivers/mtd/nand/spi/fmsh.c ]; then
+          echo "✅ fmsh.c 驱动已存在"
+          grep -q "FM25G02B" drivers/mtd/nand/spi/fmsh.c && echo "✅ FM25G02B 支持已添加"
         else
-          echo "⚠️ 警告: 复旦微补丁未找到"
+          echo "⚠️ 警告: fmsh.c 驱动未找到"
         fi
         echo ""
         echo "=== 检查设备补丁 (XG-040G-MD) ==="
         if grep -r "XG-040G" target/linux/ 2>/dev/null | head -3; then
           echo "✅ 设备补丁已找到"
         else
-          echo "⚠️ 设备补丁状态未知: 未找到 XG-040G 相关文件"
+          echo "⚠️ 设备补丁状态未知"
         fi
         echo ""
         echo "=== 检查内核版本 ==="
@@ -151,9 +148,6 @@ jobs:
         else
           echo "无法确定内核版本"
         fi
-        echo ""
-        echo "=== pending-6.12 目录内容 ==="
-        ls -la target/linux/generic/pending-6.12/ 2>/dev/null || echo "目录不存在"
         echo "=========================================="
 
     - name: SSH connection to Actions
