@@ -1,124 +1,96 @@
 #!/bin/bash
 #
-# diy-part1.sh - XG-040G-MD 设备配置
+# Copyright (c) 2019-2020 P3TERX <https://p3terx.com>
+#
+# This is free software, licensed under the MIT License.
+# See /LICENSE for more information.
+#
+# https://github.com/P3TERX/Actions-OpenWrt
+# File name: diy-part2.sh
+# Description: OpenWrt DIY script part 2 (After Update feeds)
 #
 
 echo "=========================================="
-echo "XG-040G-MD 设备配置"
+echo "开始执行 diy-part2.sh"
 echo "=========================================="
 
 cd openwrt
 
 # ============================================
-# 直接写入完整的 fmsh.c 文件（跳过补丁）
+# 1. 删除设备包中的 uci-defaults（避免覆盖自定义配置）
 # ============================================
-mkdir -p drivers/mtd/nand/spi
+rm -rf package/base-files/files/etc/uci-defaults
 
-cat > drivers/mtd/nand/spi/fmsh.c << 'EOF'
-// SPDX-License-Identifier: GPL-2.0
-/*
- * Copyright (c) 2021 Rockchip Electronics Co., Ltd.
- */
+# ============================================
+# 2. 删除所有生成随机 MAC 的脚本
+# ============================================
+find package/base-files -name "*.sh" -exec grep -l "generate_mac\|random.*mac\|dd.*urandom" {} \; -delete
 
-#include <linux/device.h>
-#include <linux/kernel.h>
-#include <linux/mtd/spinand.h>
+# ============================================
+# 3. 强制固定 MAC 地址（解决驱动生成随机 MAC 的问题）
+# ============================================
+ETH0_MAC="50:3d:7f:7b:cb:ec"
+ETH1_MAC="50:3d:7f:7b:cb:ed"
 
-#define SPINAND_MFR_FMSH		0x46  /* 'F' */
+echo "设置固定 MAC 地址: eth0=$ETH0_MAC, eth1=$ETH1_MAC"
 
-static SPINAND_OP_VARIANTS(read_cache_variants,
-		SPINAND_PAGE_READ_FROM_CACHE_X4_OP(0, 1, 0, NULL, 0),
-		SPINAND_PAGE_READ_FROM_CACHE_X2_OP(0, 1, 0, NULL, 0),
-		SPINAND_PAGE_READ_FROM_CACHE_OP(true, 0, 1, 0, NULL, 0),
-		SPINAND_PAGE_READ_FROM_CACHE_OP(false, 0, 1, 0, NULL, 0));
-
-static SPINAND_OP_VARIANTS(write_cache_variants,
-		SPINAND_PROG_LOAD_X4(true, 0, 0, NULL, 0),
-		SPINAND_PROG_LOAD(true, 0, 0, NULL, 0));
-
-static SPINAND_OP_VARIANTS(update_cache_variants,
-		SPINAND_PROG_LOAD_X4(false, 0, 0, NULL, 0),
-		SPINAND_PROG_LOAD(false, 0, 0, NULL, 0));
-
-/* FM25G02B OOB layout */
-static int fm25g02b_ooblayout_ecc(struct mtd_info *mtd, int section,
-				  struct mtd_oob_region *region)
-{
-	if (section >= 8)
-		return -ERANGE;
-
-	region->offset = 64 + section * 8;
-	region->length = 8;
-
-	return 0;
-}
-
-static int fm25g02b_ooblayout_free(struct mtd_info *mtd, int section,
-				   struct mtd_oob_region *region)
-{
-	if (section)
-		return -ERANGE;
-
-	region->offset = 2;
-	region->length = 62;
-
-	return 0;
-}
-
-static const struct mtd_ooblayout_ops fm25g02b_ooblayout = {
-	.ecc = fm25g02b_ooblayout_ecc,
-	.free = fm25g02b_ooblayout_free,
-};
-
-static const struct spinand_info fmsh_spinand_table[] = {
-	SPINAND_INFO("FM25G02B",
-		     SPINAND_ID(SPINAND_READID_METHOD_OPCODE_DUMMY, 0xD2),
-		     NAND_MEMORG(1, 2048, 128, 64, 2048, 40, 1, 1, 1),
-		     NAND_ECCREQ(40, 512),
-		     SPINAND_INFO_OP_VARIANTS(&read_cache_variants,
-					      &write_cache_variants,
-					      &update_cache_variants),
-		     SPINAND_HAS_QE_BIT,
-		     SPINAND_ECCINFO(&fm25g02b_ooblayout, NULL)),
-};
-
-static const struct spinand_manufacturer_ops fmsh_spinand_manuf_ops = {
-};
-
-const struct spinand_manufacturer fmsh_spinand_manufacturer = {
-	.id = SPINAND_MFR_FMSH,
-	.name = "fmsh",
-	.chips = fmsh_spinand_table,
-	.nchips = ARRAY_SIZE(fmsh_spinand_table),
-	.ops = &fmsh_spinand_manuf_ops,
-};
+# 方法 1：创建 preinit 脚本（在网络启动前执行）
+mkdir -p files/etc/preinit
+cat > files/etc/preinit/fixmac << EOF
+#!/bin/sh
+# 在 preinit 阶段强制设置 MAC 地址
+sleep 1
+ip link set dev eth0 address $ETH0_MAC 2>/dev/null
+ip link set dev eth1 address $ETH1_MAC 2>/dev/null
 EOF
+chmod +x files/etc/preinit/fixmac
+
+# 方法 2：创建 hotplug 脚本（网络设备添加时触发）
+mkdir -p files/etc/hotplug.d/net
+cat > files/etc/hotplug.d/net/99-fixmac << EOF
+#!/bin/sh
+[ "\$ACTION" = "add" ] && [ "\$INTERFACE" = "eth0" ] && {
+    ip link set dev eth0 address $ETH0_MAC
+}
+[ "\$ACTION" = "add" ] && [ "\$INTERFACE" = "eth1" ] && {
+    ip link set dev eth1 address $ETH1_MAC
+}
+EOF
+chmod +x files/etc/hotplug.d/net/99-fixmac
+
+# 方法 3：创建 init.d 脚本（系统启动时执行）
+mkdir -p files/etc/init.d
+cat > files/etc/init.d/fixmac << EOF
+#!/bin/sh /etc/rc.common
+START=01
+STOP=99
+
+start() {
+    ip link set dev eth0 address $ETH0_MAC 2>/dev/null
+    ip link set dev eth1 address $ETH1_MAC 2>/dev/null
+    logger -t fixmac "MAC addresses fixed"
+}
+EOF
+chmod +x files/etc/init.d/fixmac
 
 # ============================================
-# 修改 Makefile 添加 fmsh.o
+# 4. 复制自定义文件
 # ============================================
-if ! grep -q "fmsh.o" drivers/mtd/nand/spi/Makefile 2>/dev/null; then
-    sed -i 's/spinand-objs := core.o otp.o/spinand-objs := core.o fmsh.o otp.o/' drivers/mtd/nand/spi/Makefile
-    echo "✅ Makefile 已修改"
-fi
-
-# ============================================
-# 修改 core.c 注册制造商
-# ============================================
-if ! grep -q "fmsh_spinand_manufacturer" drivers/mtd/nand/spi/core.c 2>/dev/null; then
-    sed -i '/&xtx_spinand_manufacturer,/a\	&fmsh_spinand_manufacturer,' drivers/mtd/nand/spi/core.c
-    echo "✅ core.c 已修改"
-fi
-
-# ============================================
-# 修改 spinand.h 添加声明
-# ============================================
-if ! grep -q "fmsh_spinand_manufacturer" include/linux/mtd/spinand.h 2>/dev/null; then
-    sed -i '/extern const struct spinand_manufacturer xtx_spinand_manufacturer;/a extern const struct spinand_manufacturer fmsh_spinand_manufacturer;' include/linux/mtd/spinand.h
-    echo "✅ spinand.h 已修改"
+if [ -d $GITHUB_WORKSPACE/files ]; then
+    mkdir -p files
+    cp -rf $GITHUB_WORKSPACE/files/* files/
+    
+    # 清理 network 配置中自动生成的 _mac_fix 段
+    if [ -f files/etc/config/network ]; then
+        sed -i '/config device .*_mac_fix/,/^$/d' files/etc/config/network
+    fi
+    
+    echo "✅ 自定义文件已复制到 ./files/"
+else
+    echo "⚠️ 未找到自定义文件夹: $GITHUB_WORKSPACE/files"
 fi
 
 echo ""
 echo "=========================================="
-echo "✅ FM25G02B 驱动已直接写入源码"
+echo "✅ diy-part2.sh 执行完成"
 echo "=========================================="
