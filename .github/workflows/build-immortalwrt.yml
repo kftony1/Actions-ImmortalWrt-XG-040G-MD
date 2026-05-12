@@ -90,7 +90,18 @@ jobs:
         df -hT $PWD
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+        
+        # 解压设备支持文件
         tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz -C /workdir/openwrt
+        
+        # 解压自定义配置文件到 openwrt/ 目录 (替换原来的 cp -r files openwrt/)
+        if [ -f "$GITHUB_WORKSPACE/files.tar.gz" ]; then
+          echo "📦 Extracting files.tar.gz to openwrt/..."
+          tar zxvf $GITHUB_WORKSPACE/files.tar.gz -C /workdir/openwrt
+          echo "✅ files.tar.gz extracted"
+        else
+          echo "⚠️ Warning: files.tar.gz not found"
+        fi
 
     - name: Enable build ccache
       uses: klever1988/cachewrtbuild@main
@@ -114,7 +125,7 @@ jobs:
 
     - name: Load custom configuration
       run: |
-        [ -e files ] && cp -r files openwrt/
+        # 注意：files 文件夹已通过上面的压缩包解压，不再需要 cp -r
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
         chmod +x $DIY_P2_SH
         cd openwrt
