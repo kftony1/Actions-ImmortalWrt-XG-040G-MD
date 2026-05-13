@@ -115,7 +115,6 @@ jobs:
     - name: Load custom configuration
       run: |
         cd openwrt
-        # files 目录已通过 XG-040G-MD.tar.gz 解压，直接复制 .config
         [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
         chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
         $GITHUB_WORKSPACE/$DIY_P2_SH
@@ -135,6 +134,129 @@ jobs:
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
+
+    - name: Write FM25G02B driver directly
+      run: |
+        cd openwrt
+        echo "=========================================="
+        echo "直接写入 fmsh.c 驱动"
+        echo "=========================================="
+        
+        # 查找内核源码目录
+        KERNEL_DIR=$(find build_dir/target-*/linux-* -maxdepth 1 -type d -name "linux-*" 2>/dev/null | head -1)
+        if [ -z "$KERNEL_DIR" ]; then
+          echo "❌ 错误: 无法找到内核源码目录"
+          exit 1
+        fi
+        
+        cd $KERNEL_DIR
+        echo "✅ 当前内核目录: $(pwd)"
+        
+        # 写入 fmsh.c
+        mkdir -p drivers/mtd/nand/spi
+        cat > drivers/mtd/nand/spi/fmsh.c << 'EOF'
+        // SPDX-License-Identifier: GPL-2.0
+        /*
+         * Copyright (c) 2021 Rockchip Electronics Co., Ltd.
+         */
+        
+        #include <linux/device.h>
+        #include <linux/kernel.h>
+        #include <linux/mtd/spinand.h>
+        
+        #define SPINAND_MFR_FMSH           0x46  /* 'F' */
+        
+        static SPINAND_OP_VARIANTS(read_cache_variants,
+                SPINAND_PAGE_READ_FROM_CACHE_X4_OP(0, 1, 0, NULL, 0),
+                SPINAND_PAGE_READ_FROM_CACHE_X2_OP(0, 1, 0, NULL, 0),
+                SPINAND_PAGE_READ_FROM_CACHE_OP(true, 0, 1, 0, NULL, 0),
+                SPINAND_PAGE_READ_FROM_CACHE_OP(false, 0, 1, 0, NULL, 0));
+        
+        static SPINAND_OP_VARIANTS(write_cache_variants,
+                SPINAND_PROG_LOAD_X4(true, 0, 0, NULL, 0),
+                SPINAND_PROG_LOAD(true, 0, 0, NULL, 0));
+        
+        static SPINAND_OP_VARIANTS(update_cache_variants,
+                SPINAND_PROG_LOAD_X4(false, 0, 0, NULL, 0),
+                SPINAND_PROG_LOAD(false, 0, 0, NULL, 0));
+        
+        /* FM25G02B OOB layout */
+        static int fm25g02b_ooblayout_ecc(struct mtd_info *mtd, int section,
+                                          struct mtd_oob_region *region)
+        {
+            if (section >= 8)
+                return -ERANGE;
+            region->offset = 64 + section * 8;
+            region->length = 8;
+            return 0;
+        }
+        
+        static int fm25g02b_ooblayout_free(struct mtd_info *mtd, int section,
+                                           struct mtd_oob_region *region)
+        {
+            if (section)
+                return -ERANGE;
+            region->offset = 2;
+            region->length = 62;
+            return 0;
+        }
+        
+        static const struct mtd_ooblayout_ops fm25g02b_ooblayout = {
+            .ecc = fm25g02b_ooblayout_ecc,
+            .free = fm25g02b_ooblayout_free,
+        };
+        
+        static const struct spinand_info fmsh_spinand_table[] = {
+            SPINAND_INFO("FM25G02B",
+                         SPINAND_ID(SPINAND_READID_METHOD_OPCODE_DUMMY, 0xD2),
+                         NAND_MEMORG(1, 2048, 128, 64, 2048, 40, 1, 1, 1),
+                         NAND_ECCREQ(40, 512),
+                         SPINAND_INFO_OP_VARIANTS(&read_cache_variants,
+                                                  &write_cache_variants,
+                                                  &update_cache_variants),
+                         SPINAND_HAS_QE_BIT,
+                         SPINAND_ECCINFO(&fm25g02b_ooblayout, NULL)),
+        };
+        
+        static const struct spinand_manufacturer_ops fmsh_spinand_manuf_ops = {
+        };
+        
+        const struct spinand_manufacturer fmsh_spinand_manufacturer = {
+            .id = SPINAND_MFR_FMSH,
+            .name = "fmsh",
+            .chips = fmsh_spinand_table,
+            .nchips = ARRAY_SIZE(fmsh_spinand_table),
+            .ops = &fmsh_spinand_manuf_ops,
+        };
+        EOF
+        
+        echo "✅ fmsh.c 已写入"
+        
+        # 修改 Makefile
+        if [ -f drivers/mtd/nand/spi/Makefile ]; then
+            if ! grep -q "fmsh.o" drivers/mtd/nand/spi/Makefile; then
+                sed -i 's/spinand-objs := core.o otp.o/spinand-objs := core.o fmsh.o otp.o/' drivers/mtd/nand/spi/Makefile
+                echo "✅ Makefile 已修改"
+            fi
+        fi
+        
+        # 修改 core.c
+        if [ -f drivers/mtd/nand/spi/core.c ]; then
+            if ! grep -q "fmsh_spinand_manufacturer" drivers/mtd/nand/spi/core.c; then
+                sed -i '/&xtx_spinand_manufacturer,/a\	&fmsh_spinand_manufacturer,' drivers/mtd/nand/spi/core.c
+                echo "✅ core.c 已修改"
+            fi
+        fi
+        
+        # 修改 spinand.h
+        if [ -f include/linux/mtd/spinand.h ]; then
+            if ! grep -q "fmsh_spinand_manufacturer" include/linux/mtd/spinand.h; then
+                sed -i '/extern const struct spinand_manufacturer xtx_spinand_manufacturer;/a extern const struct spinand_manufacturer fmsh_spinand_manufacturer;' include/linux/mtd/spinand.h
+                echo "✅ spinand.h 已修改"
+            fi
+        fi
+        
+        echo "=========================================="
 
     - name: Compile the firmware
       id: compile
