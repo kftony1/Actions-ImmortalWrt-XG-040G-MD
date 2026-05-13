@@ -89,7 +89,7 @@ jobs:
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
         cd openwrt
-        # 解压补丁包（包含内核补丁、设备树、files配置文件）
+        # 解压补丁包（包含设备树、files配置文件）
         tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz
 
     - name: Enable build ccache
@@ -102,6 +102,7 @@ jobs:
     - name: Load custom feeds
       run: |
         [ -e $FEEDS_CONF ] && cp $FEEDS_CONF openwrt/feeds.conf.default
+        # 注意：diy-part1.sh 已简化为验证脚本，不再写入驱动
         chmod +x $DIY_P1_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
@@ -237,7 +238,11 @@ jobs:
             if ! grep -q "fmsh.o" drivers/mtd/nand/spi/Makefile; then
                 sed -i 's/spinand-objs := core.o otp.o/spinand-objs := core.o fmsh.o otp.o/' drivers/mtd/nand/spi/Makefile
                 echo "✅ Makefile 已修改"
+            else
+                echo "✅ Makefile 已包含 fmsh.o"
             fi
+        else
+            echo "⚠️ Makefile 不存在"
         fi
         
         # 修改 core.c
@@ -245,7 +250,11 @@ jobs:
             if ! grep -q "fmsh_spinand_manufacturer" drivers/mtd/nand/spi/core.c; then
                 sed -i '/&xtx_spinand_manufacturer,/a\	&fmsh_spinand_manufacturer,' drivers/mtd/nand/spi/core.c
                 echo "✅ core.c 已修改"
+            else
+                echo "✅ core.c 已包含 fmsh_spinand_manufacturer"
             fi
+        else
+            echo "⚠️ core.c 不存在"
         fi
         
         # 修改 spinand.h
@@ -253,7 +262,11 @@ jobs:
             if ! grep -q "fmsh_spinand_manufacturer" include/linux/mtd/spinand.h; then
                 sed -i '/extern const struct spinand_manufacturer xtx_spinand_manufacturer;/a extern const struct spinand_manufacturer fmsh_spinand_manufacturer;' include/linux/mtd/spinand.h
                 echo "✅ spinand.h 已修改"
+            else
+                echo "✅ spinand.h 已包含 fmsh_spinand_manufacturer"
             fi
+        else
+            echo "⚠️ spinand.h 不存在"
         fi
         
         echo "=========================================="
