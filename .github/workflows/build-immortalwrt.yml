@@ -90,18 +90,7 @@ jobs:
         df -hT $PWD
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
-        
-        # 解压设备支持文件
         tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz -C /workdir/openwrt
-        
-        # 解压自定义配置文件到 openwrt/ 目录 (替换原来的 cp -r files openwrt/)
-        if [ -f "$GITHUB_WORKSPACE/files.tar.gz" ]; then
-          echo "📦 Extracting files.tar.gz to openwrt/..."
-          tar zxvf $GITHUB_WORKSPACE/files.tar.gz -C /workdir/openwrt
-          echo "✅ files.tar.gz extracted"
-        else
-          echo "⚠️ Warning: files.tar.gz not found"
-        fi
 
     - name: Enable build ccache
       uses: klever1988/cachewrtbuild@main
@@ -116,7 +105,133 @@ jobs:
         chmod +x $DIY_P1_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
-   
+
+    - name: Write FM25G02B driver directly
+      run: |
+        cd openwrt
+        echo "=========================================="
+        echo "直接写入 fmsh.c 驱动"
+        echo "=========================================="
+        
+        # 创建目录
+        mkdir -p drivers/mtd/nand/spi
+        
+        # 写入 fmsh.c
+        cat > drivers/mtd/nand/spi/fmsh.c << 'EOF'
+        // SPDX-License-Identifier: GPL-2.0
+        /*
+         * Copyright (c) 2021 Rockchip Electronics Co., Ltd.
+         */
+        
+        #include <linux/device.h>
+        #include <linux/kernel.h>
+        #include <linux/mtd/spinand.h>
+        
+        #define SPINAND_MFR_FMSH           0x46  /* 'F' */
+        
+        static SPINAND_OP_VARIANTS(read_cache_variants,
+                SPINAND_PAGE_READ_FROM_CACHE_X4_OP(0, 1, 0, NULL, 0),
+                SPINAND_PAGE_READ_FROM_CACHE_X2_OP(0, 1, 0, NULL, 0),
+                SPINAND_PAGE_READ_FROM_CACHE_OP(true, 0, 1, 0, NULL, 0),
+                SPINAND_PAGE_READ_FROM_CACHE_OP(false, 0, 1, 0, NULL, 0));
+        
+        static SPINAND_OP_VARIANTS(write_cache_variants,
+                SPINAND_PROG_LOAD_X4(true, 0, 0, NULL, 0),
+                SPINAND_PROG_LOAD(true, 0, 0, NULL, 0));
+        
+        static SPINAND_OP_VARIANTS(update_cache_variants,
+                SPINAND_PROG_LOAD_X4(false, 0, 0, NULL, 0),
+                SPINAND_PROG_LOAD(false, 0, 0, NULL, 0));
+        
+        /* FM25G02B OOB layout */
+        static int fm25g02b_ooblayout_ecc(struct mtd_info *mtd, int section,
+                                          struct mtd_oob_region *region)
+        {
+            if (section >= 8)
+                return -ERANGE;
+        
+            region->offset = 64 + section * 8;
+            region->length = 8;
+        
+            return 0;
+        }
+        
+        static int fm25g02b_ooblayout_free(struct mtd_info *mtd, int section,
+                                           struct mtd_oob_region *region)
+        {
+            if (section)
+                return -ERANGE;
+        
+            region->offset = 2;
+            region->length = 62;
+        
+            return 0;
+        }
+        
+        static const struct mtd_ooblayout_ops fm25g02b_ooblayout = {
+            .ecc = fm25g02b_ooblayout_ecc,
+            .free = fm25g02b_ooblayout_free,
+        };
+        
+        static const struct spinand_info fmsh_spinand_table[] = {
+            SPINAND_INFO("FM25G02B",
+                         SPINAND_ID(SPINAND_READID_METHOD_OPCODE_DUMMY, 0xD2),
+                         NAND_MEMORG(1, 2048, 128, 64, 2048, 40, 1, 1, 1),
+                         NAND_ECCREQ(40, 512),
+                         SPINAND_INFO_OP_VARIANTS(&read_cache_variants,
+                                                  &write_cache_variants,
+                                                  &update_cache_variants),
+                         SPINAND_HAS_QE_BIT,
+                         SPINAND_ECCINFO(&fm25g02b_ooblayout, NULL)),
+        };
+        
+        static const struct spinand_manufacturer_ops fmsh_spinand_manuf_ops = {
+        };
+        
+        const struct spinand_manufacturer fmsh_spinand_manufacturer = {
+            .id = SPINAND_MFR_FMSH,
+            .name = "fmsh",
+            .chips = fmsh_spinand_table,
+            .nchips = ARRAY_SIZE(fmsh_spinand_table),
+            .ops = &fmsh_spinand_manuf_ops,
+        };
+        EOF
+        
+        # 修改 Makefile
+        if [ -f drivers/mtd/nand/spi/Makefile ]; then
+            if ! grep -q "fmsh.o" drivers/mtd/nand/spi/Makefile; then
+                sed -i 's/spinand-objs := core.o otp.o/spinand-objs := core.o fmsh.o otp.o/' drivers/mtd/nand/spi/Makefile
+                echo "✅ Makefile 已修改"
+            else
+                echo "✅ Makefile 已包含 fmsh.o"
+            fi
+        fi
+        
+        # 修改 core.c
+        if [ -f drivers/mtd/nand/spi/core.c ]; then
+            if ! grep -q "fmsh_spinand_manufacturer" drivers/mtd/nand/spi/core.c; then
+                sed -i '/&xtx_spinand_manufacturer,/a\	&fmsh_spinand_manufacturer,' drivers/mtd/nand/spi/core.c
+                echo "✅ core.c 已修改"
+            else
+                echo "✅ core.c 已包含 fmsh_spinand_manufacturer"
+            fi
+        fi
+        
+        # 修改 spinand.h
+        if [ -f include/linux/mtd/spinand.h ]; then
+            if ! grep -q "fmsh_spinand_manufacturer" include/linux/mtd/spinand.h; then
+                sed -i '/extern const struct spinand_manufacturer xtx_spinand_manufacturer;/a extern const struct spinand_manufacturer fmsh_spinand_manufacturer;' include/linux/mtd/spinand.h
+                echo "✅ spinand.h 已修改"
+            else
+                echo "✅ spinand.h 已包含 fmsh_spinand_manufacturer"
+            fi
+        fi
+        
+        echo ""
+        echo "=== 验证 fmsh.c ==="
+        ls -la drivers/mtd/nand/spi/fmsh.c
+        echo "=========================================="
+
     - name: Update feeds
       run: cd openwrt && ./scripts/feeds update -a
 
@@ -125,7 +240,7 @@ jobs:
 
     - name: Load custom configuration
       run: |
-        # 注意：files 文件夹已通过上面的压缩包解压，不再需要 cp -r
+        [ -e files ] && cp -r files openwrt/
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
         chmod +x $DIY_P2_SH
         cd openwrt
