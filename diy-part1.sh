@@ -1,5 +1,3 @@
-cd /mnt/d/Users/Admin/Desktop
-
 cat > diy-part1.sh << 'EOF'
 #!/bin/bash
 #
