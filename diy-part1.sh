@@ -7,16 +7,17 @@ echo "=========================================="
 echo "XG-040G-MD 设备配置"
 echo "=========================================="
 
-cd openwrt
+# 移动到 openwrt 目录
+cd $GITHUB_WORKSPACE/openwrt
 
 # ============================================
 # 1. 删除所有冲突的复旦微补丁
 # ============================================
 echo "=== 删除冲突补丁 ==="
-rm -f target/linux/generic/pending-6.12/342-mtd-spinand-Support-fmsh.patch
-rm -f target/linux/generic/pending-6.6/342-mtd-spinand-Support-fmsh.patch
-rm -f target/linux/generic/backport-6.12/640-spinand-add-fmsh-support.patch
-rm -f target/linux/generic/backport-6.6/640-spinand-add-fmsh-support.patch
+rm -f target/linux/generic/backport-6.12/*fmsh*.patch 2>/dev/null
+rm -f target/linux/generic/backport-6.6/*fmsh*.patch 2>/dev/null
+rm -f target/linux/generic/pending-6.12/*fmsh*.patch 2>/dev/null
+rm -f target/linux/generic/pending-6.6/*fmsh*.patch 2>/dev/null
 echo "✅ 冲突补丁已删除"
 
 # ============================================
@@ -116,6 +117,8 @@ if [ -f drivers/mtd/nand/spi/Makefile ]; then
     if ! grep -q "fmsh.o" drivers/mtd/nand/spi/Makefile; then
         sed -i 's/spinand-objs := core.o otp.o/spinand-objs := core.o fmsh.o otp.o/' drivers/mtd/nand/spi/Makefile
         echo "✅ Makefile 已修改"
+    else
+        echo "✅ Makefile 已包含 fmsh.o"
     fi
 else
     echo "⚠️ Makefile 不存在"
@@ -129,6 +132,8 @@ if [ -f drivers/mtd/nand/spi/core.c ]; then
     if ! grep -q "fmsh_spinand_manufacturer" drivers/mtd/nand/spi/core.c; then
         sed -i '/&xtx_spinand_manufacturer,/a\	&fmsh_spinand_manufacturer,' drivers/mtd/nand/spi/core.c
         echo "✅ core.c 已修改"
+    else
+        echo "✅ core.c 已包含 fmsh_spinand_manufacturer"
     fi
 else
     echo "⚠️ core.c 不存在"
@@ -142,6 +147,8 @@ if [ -f include/linux/mtd/spinand.h ]; then
     if ! grep -q "fmsh_spinand_manufacturer" include/linux/mtd/spinand.h; then
         sed -i '/extern const struct spinand_manufacturer xtx_spinand_manufacturer;/a extern const struct spinand_manufacturer fmsh_spinand_manufacturer;' include/linux/mtd/spinand.h
         echo "✅ spinand.h 已修改"
+    else
+        echo "✅ spinand.h 已包含 fmsh_spinand_manufacturer"
     fi
 else
     echo "⚠️ spinand.h 不存在"
