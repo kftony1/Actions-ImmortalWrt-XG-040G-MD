@@ -89,7 +89,7 @@ jobs:
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
         cd openwrt
-        # 解压补丁包（包含内核补丁、设备树、files配置文件）
+        # 解压补丁包（包含设备树、files配置文件）
         tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz
 
     - name: Enable build ccache
@@ -142,22 +142,59 @@ jobs:
         echo "直接写入 fmsh.c 驱动"
         echo "=========================================="
         
-        # 显示 build_dir 结构用于调试
-        echo "=== build_dir 目录 ==="
-        ls -la build_dir/ 2>/dev/null || echo "build_dir 不存在"
+        # 智能查找内核源码目录
+        echo "=== 智能查找内核目录 ==="
         
-        echo ""
-        echo "=== 查找内核目录 ==="
-        KERNEL_DIR=$(find build_dir -type d -name "linux-*" 2>/dev/null | head -1)
+        KERNEL_DIR=""
+        
+        # 方法1: 查找包含 drivers/mtd/nand/spi 目录的内核源码
+        for dir in build_dir/target-*/linux-*/linux-*; do
+          if [ -d "$dir/drivers/mtd/nand/spi" ]; then
+            KERNEL_DIR="$dir"
+            echo "找到内核目录: $KERNEL_DIR (包含 drivers/mtd/nand/spi)"
+            break
+          fi
+        done
+        
+        # 方法2: 查找包含内核 Makefile 的目录
+        if [ -z "$KERNEL_DIR" ]; then
+          KERNEL_DIR=$(find build_dir/target-*/linux-* -type f -name "Makefile" -path "*/Makefile" -exec dirname {} \; 2>/dev/null | head -1)
+          if [ -n "$KERNEL_DIR" ]; then
+            echo "找到内核目录: $KERNEL_DIR (包含 Makefile)"
+          fi
+        fi
+        
+        # 方法3: 查找带 linux- 开头的目录（排除 host 目录）
+        if [ -z "$KERNEL_DIR" ]; then
+          KERNEL_DIR=$(find build_dir -type d -name "linux-*" -not -path "*/host/*" 2>/dev/null | head -1)
+          if [ -n "$KERNEL_DIR" ]; then
+            echo "找到内核目录: $KERNEL_DIR (linux-* 目录)"
+          fi
+        fi
+        
         if [ -z "$KERNEL_DIR" ]; then
           echo "❌ 错误: 无法找到内核源码目录"
+          echo ""
+          echo "=== 调试: 显示 build_dir 结构 ==="
+          find build_dir -type d -name "linux-*" 2>/dev/null
           exit 1
         fi
         
         cd $KERNEL_DIR
+        echo ""
         echo "✅ 当前内核目录: $(pwd)"
         
+        # 验证目录正确性
+        if [ -f "drivers/mtd/nand/spi/Makefile" ]; then
+          echo "✅ 验证通过: 找到 drivers/mtd/nand/spi/Makefile"
+        else
+          echo "⚠️ 警告: 未找到 drivers/mtd/nand/spi/Makefile"
+          echo "请检查内核目录是否正确"
+        fi
+        
         # 写入 fmsh.c
+        echo ""
+        echo "=== 写入 fmsh.c ==="
         mkdir -p drivers/mtd/nand/spi
         cat > drivers/mtd/nand/spi/fmsh.c << 'EOF'
         // SPDX-License-Identifier: GPL-2.0
@@ -238,6 +275,8 @@ jobs:
         echo "✅ fmsh.c 已写入"
         
         # 修改 Makefile
+        echo ""
+        echo "=== 修改 Makefile ==="
         if [ -f drivers/mtd/nand/spi/Makefile ]; then
             if ! grep -q "fmsh.o" drivers/mtd/nand/spi/Makefile; then
                 sed -i 's/spinand-objs := core.o otp.o/spinand-objs := core.o fmsh.o otp.o/' drivers/mtd/nand/spi/Makefile
@@ -250,6 +289,8 @@ jobs:
         fi
         
         # 修改 core.c
+        echo ""
+        echo "=== 修改 core.c ==="
         if [ -f drivers/mtd/nand/spi/core.c ]; then
             if ! grep -q "fmsh_spinand_manufacturer" drivers/mtd/nand/spi/core.c; then
                 sed -i '/&xtx_spinand_manufacturer,/a\	&fmsh_spinand_manufacturer,' drivers/mtd/nand/spi/core.c
@@ -262,6 +303,8 @@ jobs:
         fi
         
         # 修改 spinand.h
+        echo ""
+        echo "=== 修改 spinand.h ==="
         if [ -f include/linux/mtd/spinand.h ]; then
             if ! grep -q "fmsh_spinand_manufacturer" include/linux/mtd/spinand.h; then
                 sed -i '/extern const struct spinand_manufacturer xtx_spinand_manufacturer;/a extern const struct spinand_manufacturer fmsh_spinand_manufacturer;' include/linux/mtd/spinand.h
@@ -273,6 +316,9 @@ jobs:
             echo "⚠️ spinand.h 不存在"
         fi
         
+        echo ""
+        echo "=========================================="
+        echo "✅ FM25G02B 驱动写入完成"
         echo "=========================================="
 
     - name: Compile the firmware
