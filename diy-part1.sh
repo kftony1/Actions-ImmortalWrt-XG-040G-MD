@@ -7,8 +7,14 @@ echo "=========================================="
 echo "XG-040G-MD 设备配置"
 echo "=========================================="
 
-# 移动到 openwrt 目录
-cd $GITHUB_WORKSPACE/openwrt
+# ============================================
+# 0. 进入 OpenWrt 源码根目录
+# ============================================
+cd $GITHUB_WORKSPACE/openwrt || {
+    echo "❌ 错误: 无法切换到 openwrt 目录"
+    exit 1
+}
+echo "✅ 当前目录: $(pwd)"
 
 # ============================================
 # 1. 删除所有冲突的复旦微补丁
@@ -21,7 +27,25 @@ rm -f target/linux/generic/pending-6.6/*fmsh*.patch 2>/dev/null
 echo "✅ 冲突补丁已删除"
 
 # ============================================
-# 2. 直接写入 fmsh.c 文件
+# 2. 进入内核源码目录
+# ============================================
+echo "=== 进入内核源码目录 ==="
+# 查找内核源码目录（支持不同版本）
+KERNEL_DIR=$(find build_dir/target-*/linux-* -maxdepth 1 -type d -name "linux-*" 2>/dev/null | head -1)
+if [ -z "$KERNEL_DIR" ]; then
+    echo "⚠️ 警告: 无法找到内核源码目录，尝试使用备用路径"
+    KERNEL_DIR="build_dir/target-*/linux-*/linux-*"
+fi
+cd $KERNEL_DIR 2>/dev/null || {
+    echo "❌ 错误: 无法进入内核源码目录"
+    echo "当前目录内容:"
+    ls -la
+    exit 1
+}
+echo "✅ 当前内核目录: $(pwd)"
+
+# ============================================
+# 3. 直接写入 fmsh.c 文件
 # ============================================
 echo "=== 写入 fmsh.c 驱动 ==="
 
@@ -110,7 +134,7 @@ FMSH_EOF
 echo "✅ fmsh.c 已写入"
 
 # ============================================
-# 3. 修改 Makefile 添加 fmsh.o
+# 4. 修改 Makefile 添加 fmsh.o
 # ============================================
 echo "=== 修改 Makefile ==="
 if [ -f drivers/mtd/nand/spi/Makefile ]; then
@@ -121,11 +145,11 @@ if [ -f drivers/mtd/nand/spi/Makefile ]; then
         echo "✅ Makefile 已包含 fmsh.o"
     fi
 else
-    echo "⚠️ Makefile 不存在"
+    echo "⚠️ Makefile 不存在，跳过"
 fi
 
 # ============================================
-# 4. 修改 core.c 注册制造商
+# 5. 修改 core.c 注册制造商
 # ============================================
 echo "=== 修改 core.c ==="
 if [ -f drivers/mtd/nand/spi/core.c ]; then
@@ -136,11 +160,11 @@ if [ -f drivers/mtd/nand/spi/core.c ]; then
         echo "✅ core.c 已包含 fmsh_spinand_manufacturer"
     fi
 else
-    echo "⚠️ core.c 不存在"
+    echo "⚠️ core.c 不存在，跳过"
 fi
 
 # ============================================
-# 5. 修改 spinand.h 添加声明
+# 6. 修改 spinand.h 添加声明
 # ============================================
 echo "=== 修改 spinand.h ==="
 if [ -f include/linux/mtd/spinand.h ]; then
@@ -151,8 +175,15 @@ if [ -f include/linux/mtd/spinand.h ]; then
         echo "✅ spinand.h 已包含 fmsh_spinand_manufacturer"
     fi
 else
-    echo "⚠️ spinand.h 不存在"
+    echo "⚠️ spinand.h 不存在，跳过"
 fi
+
+# ============================================
+# 7. 验证
+# ============================================
+echo ""
+echo "=== 验证 fmsh.c ==="
+ls -la drivers/mtd/nand/spi/fmsh.c
 
 echo ""
 echo "=========================================="
