@@ -23,10 +23,10 @@ on:
     - cron: 0 8 * * 1
 
 env:
-  REPO_URL: https://github.com/immortalwrt/immortalwrt.git
-  REPO_BRANCH: openwrt-25.12
+  REPO_URL: https://github.com/openwrt/openwrt.git
+  REPO_BRANCH: main
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: openwrt.config         
+  CONFIG_FILE: openwrt.config          
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
   UPLOAD_BIN_DIR: true
@@ -89,8 +89,22 @@ jobs:
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
         cd openwrt
-        # 解压补丁包（包含设备树、files配置文件、复旦微补丁）
+        # 解压补丁包（包含设备树、files配置文件）
         tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz
+
+    - name: Apply OpenWrt specific patches and refresh
+      run: |
+        cd openwrt
+        # 从仓库根目录的 patches-6.12-openwrt 复制专用补丁
+        if [ -f "$GITHUB_WORKSPACE/patches-6.12-openwrt/499-mtd-spinand-FudanMicro-FM25G02B.patch" ]; then
+          cp -fv "$GITHUB_WORKSPACE/patches-6.12-openwrt/499-mtd-spinand-FudanMicro-FM25G02B.patch" target/linux/airoha/patches-6.12/
+          echo "✅ Applied OpenWrt specific patch"
+        else
+          echo "⚠️ OpenWrt specific patch not found, skipping"
+        fi
+        # 刷新内核补丁，自动调整行号
+        export TERM=linux
+        make target/linux/refresh
 
     - name: Enable build ccache
       uses: klever1988/cachewrtbuild@main
@@ -115,9 +129,16 @@ jobs:
     - name: Load custom configuration
       run: |
         cd openwrt
-        [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
-        chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
-        $GITHUB_WORKSPACE/$DIY_P2_SH
+        if [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ]; then
+          cp -fv "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
+          echo "✅ Custom config loaded"
+          head -5 .config
+        else
+          echo "❌ ERROR: $CONFIG_FILE not found in workspace!"
+          exit 1
+        fi
+        chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH"
+        "$GITHUB_WORKSPACE/$DIY_P2_SH"
 
     - name: SSH connection to Actions
       uses: P3TERX/ssh2actions@v1.0.0
@@ -130,6 +151,13 @@ jobs:
       id: package
       run: |
         cd openwrt
+        if [ ! -f .config ]; then
+          echo "❌ ERROR: .config file not found after Load custom configuration step!"
+          echo "Current openwrt/ directory contents:"
+          ls -la
+          exit 1
+        fi
+        echo "✅ .config found, running make defconfig"
         make defconfig
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
