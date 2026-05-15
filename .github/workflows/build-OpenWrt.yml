@@ -102,10 +102,7 @@ jobs:
         else
           echo "⚠️ OpenWrt specific patch not found, skipping"
         fi
-        # 刷新内核补丁，自动调整行号
-        export TERM=linux
-        make target/linux/refresh
-
+        
     - name: Enable build ccache
       uses: klever1988/cachewrtbuild@main
       with:
