@@ -130,6 +130,7 @@ jobs:
       id: package
       run: |
         cd openwrt
+        export TERM=linux
         # 刷新内核补丁，自动修正行号偏移
         make target/linux/refresh
         make defconfig
