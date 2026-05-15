@@ -149,6 +149,13 @@ jobs:
       id: package
       run: |
         cd openwrt
+        if [ ! -f .config ]; then
+          echo "❌ ERROR: .config file not found after Load custom configuration step!"
+          echo "Current openwrt/ directory contents:"
+          ls -la
+          exit 1
+        fi
+        echo "✅ .config found, running make defconfig"
         make defconfig
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
