@@ -5,7 +5,7 @@
 # See /LICENSE for more information.
 #
 # https://github.com/P3TERX/Actions-OpenWrt
-# Description: Build OpenWrt (kernel 6.6) using GitHub Actions
+# Description: Build OpenWrt using GitHub Actions
 #
 
 name: Build OpenWrt
@@ -23,9 +23,8 @@ on:
     - cron: 0 8 * * 1
 
 env:
-  # 使用 OpenWrt 官方仓库，主分支当前内核为 6.6
-  REPO_URL: https://github.com/openwrt/openwrt.git
-  REPO_BRANCH: main
+  REPO_URL: https://github.com/openwrt/openwrt.git   # 改为 OpenWrt 官方仓库
+  REPO_BRANCH: main                                   # 使用主分支（当前为 6.12 内核快照）
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: .config
   DIY_P1_SH: diy-part1.sh
@@ -90,20 +89,14 @@ jobs:
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
         cd openwrt
-        # 解压补丁包（包含设备树、files配置文件、复旦微补丁，同时支持 6.6/6.12 补丁）
+        # 解压补丁包（包含设备树、files配置文件、复旦微补丁）
         tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz
-
-    - name: Refresh kernel patches (auto-adjust line numbers)
-      run: |
-        cd openwrt
-        export TERM=linux
-        make target/linux/refresh
 
     - name: Enable build ccache
       uses: klever1988/cachewrtbuild@main
       with:
         ccache: 'true'
-        mixkey: 'openwrt-xg040gmd-66'          # 修改缓存标识以区分内核版本
+        mixkey: 'openwrt-xg040gmd-612'          # 修改缓存标识
         prefix: ${{ github.workspace }}/openwrt
 
     - name: Load custom feeds
