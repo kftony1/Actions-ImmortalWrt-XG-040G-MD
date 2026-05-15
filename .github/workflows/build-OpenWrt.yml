@@ -8,7 +8,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 
-name: Build OpenWrt
+name: Build OpenWet
 
 on:
   repository_dispatch:
@@ -23,8 +23,8 @@ on:
     - cron: 0 8 * * 1
 
 env:
-  REPO_URL: https://github.com/openwrt/openwrt.git   # 改为 OpenWrt 官方仓库
-  REPO_BRANCH: main                                   # 使用主分支（当前为 6.12 内核快照）
+  REPO_URL: https://github.com/openwrt/openwrt.git
+  REPO_BRANCH: main
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: .config
   DIY_P1_SH: diy-part1.sh
@@ -96,7 +96,7 @@ jobs:
       uses: klever1988/cachewrtbuild@main
       with:
         ccache: 'true'
-        mixkey: 'openwrt-xg040gmd-612'          # 修改缓存标识
+        mixkey: 'openwrt-xg040gmd-612'
         prefix: ${{ github.workspace }}/openwrt
 
     - name: Load custom feeds
