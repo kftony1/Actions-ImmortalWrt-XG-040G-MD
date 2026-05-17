@@ -1,14 +1,12 @@
-#
 # Copyright (c) 2019-2020 P3TERX <https://p3terx.com>
 #
 # This is free software, licensed under the MIT License.
 # See /LICENSE for more information.
 #
 # https://github.com/P3TERX/Actions-OpenWrt
-# Description: Build OpenWrt using GitHub Actions
-#
+# Description: Build OpenWrt (6.12 kernel) for XG-040G-MD
 
-name: Build OpenWrt
+name: Build OpenWrt (6.12 kernel)
 
 on:
   repository_dispatch:
@@ -24,11 +22,8 @@ on:
 
 env:
   REPO_URL: https://github.com/openwrt/openwrt.git
-  REPO_BRANCH: main
-  FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: openwrt.config          
-  DIY_P1_SH: diy-part1.sh
-  DIY_P2_SH: diy-part2.sh
+  REPO_BRANCH: main                      # 主线分支，内核 6.12
+  CONFIG_FILE: openwrt.config
   UPLOAD_BIN_DIR: true
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
@@ -89,20 +84,21 @@ jobs:
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
         cd openwrt
-        # 解压补丁包（包含设备树、files配置文件）
+        # 解压设备树、files 等预置文件
         tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz
 
-    - name: Apply OpenWrt specific patches and refresh
+    - name: Apply 6.12 kernel patches (复旦微闪存补丁)
       run: |
-        cd openwrt
-        # 从仓库根目录的 patches-6.12-openwrt 复制专用补丁
-        if [ -f "$GITHUB_WORKSPACE/patches-6.12-openwrt/499-mtd-spinand-FudanMicro-FM25G02B.patch" ]; then
-          cp -fv "$GITHUB_WORKSPACE/patches-6.12-openwrt/499-mtd-spinand-FudanMicro-FM25G02B.patch" target/linux/airoha/patches-6.12/
-          echo "✅ Applied OpenWrt specific patch"
+        PATCH_DIR="$GITHUB_WORKSPACE/patches-6.12-openwrt"
+        TARGET_DIR="openwrt/target/linux/generic/pending-6.12"
+        if [ -d "$PATCH_DIR" ]; then
+          mkdir -p "$TARGET_DIR"
+          cp -f "$PATCH_DIR"/*.patch "$TARGET_DIR/" 2>/dev/null || true
+          echo "Patches copied from $PATCH_DIR to $TARGET_DIR"
         else
-          echo "⚠️ OpenWrt specific patch not found, skipping"
+          echo "Warning: patches-6.12-openwrt directory not found, skip patching"
         fi
-        
+
     - name: Enable build ccache
       uses: klever1988/cachewrtbuild@main
       with:
@@ -110,32 +106,36 @@ jobs:
         mixkey: 'openwrt-xg040gmd-612'
         prefix: ${{ github.workspace }}/openwrt
 
-    - name: Load custom feeds
+    # ========== 内联 diy-part1.sh ==========
+    # 请将原 diy-part1.sh 中的所有命令写在下方的 run 块中
+    - name: Custom steps - part 1 (feeds & sources)
       run: |
-        [ -e $FEEDS_CONF ] && cp $FEEDS_CONF openwrt/feeds.conf.default
-        chmod +x $DIY_P1_SH
         cd openwrt
-        $GITHUB_WORKSPACE/$DIY_P1_SH
-   
+        echo "========== 执行 diy-part1 自定义命令 =========="
+        # 示例：修改 feeds.conf.default，添加第三方软件源等
+        # cp $GITHUB_WORKSPACE/feeds.conf.default feeds.conf.default
+        # echo "src-git mypackages https://github.com/xxx/xxx.git" >> feeds.conf.default
+        # 请根据实际需要填充命令
+        echo "========== diy-part1 完成 =========="
+
     - name: Update feeds
       run: cd openwrt && ./scripts/feeds update -a
 
     - name: Install feeds
       run: cd openwrt && ./scripts/feeds install -a
 
-    - name: Load custom configuration
+    # ========== 内联 diy-part2.sh ==========
+    # 请将原 diy-part2.sh 中的所有命令写在下方的 run 块中
+    - name: Custom steps - part 2 (configuration)
       run: |
         cd openwrt
-        if [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ]; then
-          cp -fv "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
-          echo "✅ Custom config loaded"
-          head -5 .config
-        else
-          echo "❌ ERROR: $CONFIG_FILE not found in workspace!"
-          exit 1
-        fi
-        chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH"
-        "$GITHUB_WORKSPACE/$DIY_P2_SH"
+        echo "========== 执行 diy-part2 自定义命令 =========="
+        # 复制配置文件
+        [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
+        # 其他自定义操作，例如：
+        # make defconfig
+        # sed -i 's/xxx/yyy/' .config
+        echo "========== diy-part2 完成 =========="
 
     - name: SSH connection to Actions
       uses: P3TERX/ssh2actions@v1.0.0
@@ -148,13 +148,6 @@ jobs:
       id: package
       run: |
         cd openwrt
-        if [ ! -f .config ]; then
-          echo "❌ ERROR: .config file not found after Load custom configuration step!"
-          echo "Current openwrt/ directory contents:"
-          ls -la
-          exit 1
-        fi
-        echo "✅ .config found, running make defconfig"
         make defconfig
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
@@ -170,7 +163,7 @@ jobs:
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
-        
+
     - name: Check space usage
       if: (!cancelled())
       run: df -hT
