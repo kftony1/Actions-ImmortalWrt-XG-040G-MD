@@ -14,7 +14,7 @@ on:
         type: boolean
 
 env:
-  CONFIG_FILE: "OpenWRT.config"
+  CONFIG_FILE: "openwrt.config"
   # REPO_URL: https://github.com/immortalwrt/immortalwrt.git
   REPO_URL: https://github.com/openwrt/openwrt.git
   REPO_BRANCH: main
@@ -118,7 +118,7 @@ jobs:
         with:
           name: build-config
           path: |
-            OpenWRT.config
+            openwrt.config
             openwrt/defconfig-final.config
             openwrt/feeds.conf.default
 
