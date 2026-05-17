@@ -1,4 +1,4 @@
-name: build-OpenWrt
+name: Build_XG_040G_MD
 
 permissions:
   contents: write
@@ -14,8 +14,7 @@ on:
         type: boolean
 
 env:
-  CONFIG_FILE: "openwrt.config"
-  # REPO_URL: https://github.com/immortalwrt/immortalwrt.git
+  CONFIG_FILE: "openwrt.config"                # 修改为全小写
   REPO_URL: https://github.com/openwrt/openwrt.git
   REPO_BRANCH: main
   FEEDS_CONF: feeds.conf.default-main
@@ -65,16 +64,10 @@ jobs:
       - name: Clone OpenWrt source code and apply XG-040G-MD patch files
         run: |
           git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" openwrt
-          # 解压 XG-040G-MD.tar.gz 到 openwrt 目录（包含设备树、files等）
           tar -xzf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz -C openwrt/
-          # 进入补丁目录（仓库根目录下的 patches-6.12-openwrt）
           cd patches-6.12-openwrt
-          # 仅复制复旦微闪存补丁到内核补丁目录（pending-6.12）
-          # 补丁作用：添加复旦微 FM25G02B SPI NAND 芯片支持
-          [ -e 499-mtd-spinand-FudanMicro-FM25G02B.patch ] && cp -f 499-mtd-spinand-FudanMicro-FM25G02B.patch ../openwrt/target/linux/generic/pending-6.12/
-          # 注意：原 airoha 相关文件及 342 补丁的复制已全部删除
+          [ -e 499-mtd-spinand-FudanMicro-FM25G02B.patch ] && mkdir -p ../openwrt/target/linux/generic/pending-6.12/ && cp -f 499-mtd-spinand-FudanMicro-FM25G02B.patch ../openwrt/target/linux/generic/pending-6.12/
 
-      # ========== 新增 diy-part1.sh ==========
       - name: Run diy-part1.sh
         run: |
           if [ -f "$GITHUB_WORKSPACE/diy-part1.sh" ]; then
@@ -100,14 +93,12 @@ jobs:
           cd openwrt && make defconfig
           [ -e .config ] && cp .config defconfig-final.config
 
-      # ========== 新增 diy-part2.sh ==========
       - name: Run diy-part2.sh
         run: |
           if [ -f "$GITHUB_WORKSPACE/diy-part2.sh" ]; then
             chmod +x "$GITHUB_WORKSPACE/diy-part2.sh"
             cd openwrt
             "$GITHUB_WORKSPACE/diy-part2.sh"
-            # 如果 diy-part2.sh 修改了 .config，重新生成配置
             make defconfig
           else
             echo "⚠️ diy-part2.sh not found, skipping"
@@ -126,7 +117,6 @@ jobs:
         working-directory: ./openwrt
         run: |
           make download -j4 V=s
-          # Remove small incomplete files <1KB
           find dl -size -1024c -delete
 
       - name: Compile OpenWrt firmware
@@ -192,4 +182,4 @@ jobs:
           retain_days: 7
           keep_minimum_runs: 5
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}好 现在 详细解读这个文件
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
