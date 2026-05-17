@@ -90,6 +90,17 @@ jobs:
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
         tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz -C /workdir/openwrt
 
+    - name: Apply custom kernel patches
+      run: |
+        cd openwrt
+        mkdir -p target/linux/airoha/patches-6.12
+        if [ -d "$GITHUB_WORKSPACE/patches-6.12-openwrt" ]; then
+          cp -fv $GITHUB_WORKSPACE/patches-6.12-openwrt/*.patch target/linux/airoha/patches-6.12/ || true
+          echo "✅ Applied custom patches"
+        else
+          echo "⚠️ patches-6.12-openwrt directory not found, skipping"
+        fi
+
     - name: Enable build ccache
       uses: klever1988/cachewrtbuild@main
       with:
