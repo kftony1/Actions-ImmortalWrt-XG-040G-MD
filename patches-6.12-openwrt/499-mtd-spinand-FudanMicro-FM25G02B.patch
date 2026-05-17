@@ -185,3 +185,9 @@ const struct spinand_manufacturer fmsh_spinand_manuf = {
 	.nchips = ARRAY_SIZE(fmsh_spinand_table),
 	.ops = &fmsh_spinand_manuf_ops,
 };
+
+/* Module registration for OpenWrt / Linux 6.12 */
+module_spinand_manufacturer(fmsh_spinand_manuf);
+MODULE_LICENSE("GPL v2");
+MODULE_AUTHOR("FMSH Corporation");
+MODULE_DESCRIPTION("FMSH SPI NAND driver - supports FM25G02B, FM25S01A, FM25S01BI3, FM25S02A");
