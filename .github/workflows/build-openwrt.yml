@@ -23,10 +23,10 @@ on:
     - cron: 0 8 * * 1
 
 env:
-  REPO_URL: https://github.com/immortalwrt/immortalwrt
+  REPO_URL: https://github.com/openwrt/openwrt
   REPO_BRANCH: master
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: .config
+  CONFIG_FILE: OpenWRT.config
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
   UPLOAD_BIN_DIR: true
@@ -97,12 +97,19 @@ jobs:
         mixkey: 'immortalwrt-xg040gmd-612'
         prefix: ${{ github.workspace }}/openwrt
 
-    - name: Load custom feeds
-      run: |
-        [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
-        chmod +x $DIY_P1_SH
-        cd openwrt
-        $GITHUB_WORKSPACE/$DIY_P1_SH
+    -  name: Load custom configuration
+  run: |
+    cd openwrt
+    if [ -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ]; then
+      cp -fv "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
+      echo "✅ Custom config loaded"
+      head -5 .config
+    else
+      echo "❌ ERROR: $CONFIG_FILE not found in workspace!"
+      exit 1
+    fi
+    chmod +x "$GITHUB_WORKSPACE/$DIY_P2_SH"
+    "$GITHUB_WORKSPACE/$DIY_P2_SH"
    
     - name: Update feeds
       run: cd openwrt && ./scripts/feeds update -a
