@@ -117,15 +117,11 @@ jobs:
           make download -j4 V=s
           find dl -size -1024c -delete
 
-      - name: Compile OpenWrt firmware
+      - name: Compile the firmware
         id: compile
         run: |
           cd openwrt
-          if [[ "${{ inputs.log_switch }}" == "true" ]]; then
-            make -j1 V=s
-          else
-            make -j$(nproc)
-          fi
+          make -j1 V=s
           DEVICE_NAME=$(grep -o 'CONFIG_TARGET.*DEVICE_[^=]*=y' .config | head -1 | sed 's/.*DEVICE_\(.*\)=y/\1/')
           if [[ -n "$DEVICE_NAME" ]]; then
             echo "DEVICE_NAME=_${DEVICE_NAME}" >> $GITHUB_ENV
