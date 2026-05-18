@@ -89,15 +89,8 @@ jobs:
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
         cd openwrt
-        # 解压补丁包（包含设备树、files配置文件、复旦微补丁）
+        # 解压设备补丁包（包含设备树、files配置文件，不包含闪存驱动补丁）
         tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz
-
-    - name: Apply FM25G02B SPI NAND patch (FudanMicro)
-      run: |
-        PATCH_DIR="openwrt/target/linux/generic/pending-6.12"
-        mkdir -p "$PATCH_DIR"
-        cp "$GITHUB_WORKSPACE/patches-6.12-openwrt/499-mtd-spinand-FudanMicro-FM25G02B.patch" "$PATCH_DIR/"
-        echo "✅ SPI NAND patch copied to $PATCH_DIR"
 
     - name: Enable build ccache
       uses: klever1988/cachewrtbuild@main
@@ -127,28 +120,21 @@ jobs:
         $GITHUB_WORKSPACE/$DIY_P2_SH
         make defconfig
 
-    # ========== 强制修正内核配置（关键步骤） ==========
-    - name: Force correct kernel config (enable Airoha drivers and SPI NAND as modules)
+    # ========== 强制启用 Airoha 网络驱动（不涉及闪存补丁） ==========
+    - name: Force enable Airoha network driver
       run: |
         cd openwrt
-        # 追加必须的内核配置（确保作为模块编译）
-        cat >> .config << 'EOF'
-        # Force Airoha Ethernet/NPU/Switch/PHY as modules
-        CONFIG_NET_VENDOR_AIROHA=y
-        CONFIG_AIROHA_ETH=m
-        CONFIG_AIROHA_NPU=m
-        CONFIG_AIROHA_SWITCH=m
-        CONFIG_PHY_AIROHA_EN8811H=m
-        # SPI NAND as module
-        CONFIG_MTD_SPI_NAND=m
-        CONFIG_SPI_MEM=y
-        EOF
-        # 将新配置生效（非交互）
+        # 使用 scripts/config 工具安全地设置内核选项为模块
+        ./scripts/config --module CONFIG_AIROHA_ETH
+        ./scripts/config --enable CONFIG_NET_VENDOR_AIROHA
+        ./scripts/config --module CONFIG_AIROHA_NPU
+        ./scripts/config --module CONFIG_AIROHA_SWITCH
+        ./scripts/config --module CONFIG_PHY_AIROHA_EN8811H
+        # 重新生成最终配置（非交互）
         make olddefconfig
-        # 验证关键配置是否已生效
-        echo "=== Kernel config verification ==="
-        grep -E "CONFIG_AIROHA_ETH|CONFIG_AIROHA_NPU|CONFIG_AIROHA_SWITCH|CONFIG_PHY_AIROHA_EN8811H|CONFIG_MTD_SPI_NAND|CONFIG_SPI_MEM" .config || true
-    # ===============================================
+        echo "=== Network driver configuration ==="
+        grep -E "CONFIG_AIROHA_ETH|CONFIG_PHY_AIROHA_EN8811H" .config || true
+    # ============================================================
 
     - name: Download package
       id: package
