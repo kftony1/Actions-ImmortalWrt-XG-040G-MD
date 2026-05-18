@@ -66,14 +66,14 @@ jobs:
           git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" openwrt
           tar -xzf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz -C openwrt/
 
-      # --- 新增步骤：应用 FM25G02B SPI NAND 驱动补丁 ---
+      # --- 修正补丁路径：假设补丁位于仓库根目录的 patches-6.12-openwrt/ 下 ---
       - name: Apply FM25G02B SPI NAND patch to kernel 6.12
         run: |
           PATCH_DIR="openwrt/target/linux/generic/pending-6.12"
           mkdir -p "$PATCH_DIR"
-          cp "$GITHUB_WORKSPACE/Actions-ImmortalWrt-XG-040G-MD/patches-6.12-openwrt/499-mtd-spinand-FudanMicro-FM25G02B.patch" "$PATCH_DIR/"
+          cp "$GITHUB_WORKSPACE/patches-6.12-openwrt/499-mtd-spinand-FudanMicro-FM25G02B.patch" "$PATCH_DIR/"
           echo "✅ SPI NAND patch copied to $PATCH_DIR"
-      # ------------------------------------------------
+      # ----------------------------------------------------------------
 
       - name: Run diy-part1.sh
         run: |
