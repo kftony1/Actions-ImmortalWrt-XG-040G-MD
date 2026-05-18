@@ -8,7 +8,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 
-name: Build openwrt
+name: Build immortalwrt
 
 on:
   repository_dispatch:
@@ -23,10 +23,10 @@ on:
     - cron: 0 8 * * 1
 
 env:
-  REPO_URL: https://github.com/openwrt/openwrt.git    # 改为官方 OpenWrt 源码
+  REPO_URL: https://github.com/openwrt/openwrt.git    # 官方 OpenWrt 源码
   REPO_BRANCH: main                                    # 使用 main 分支
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: openwrt.config          # 使用仓库根目录的 openwrt.config
+  CONFIG_FILE: openwrt.config          # 仓库根目录的 openwrt.config
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
   UPLOAD_BIN_DIR: true
@@ -89,8 +89,15 @@ jobs:
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
         cd openwrt
-        # 解压补丁包（包含设备树、files配置文件）
+        # 解压补丁包（包含设备树、files配置文件、复旦微补丁）
         tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz
+
+    - name: Apply FM25G02B SPI NAND patch (FudanMicro)
+      run: |
+        PATCH_DIR="openwrt/target/linux/generic/pending-6.12"
+        mkdir -p "$PATCH_DIR"
+        cp "$GITHUB_WORKSPACE/patches-6.12-openwrt/499-mtd-spinand-FudanMicro-FM25G02B.patch" "$PATCH_DIR/"
+        echo "✅ SPI NAND patch copied to $PATCH_DIR"
 
     - name: Enable build ccache
       uses: klever1988/cachewrtbuild@main
@@ -112,25 +119,41 @@ jobs:
     - name: Install feeds
       run: cd openwrt && ./scripts/feeds install -a
 
-    - name: Load custom configuration
+    - name: Load custom configuration and defconfig
       run: |
         cd openwrt
         [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
         chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
         $GITHUB_WORKSPACE/$DIY_P2_SH
+        make defconfig
 
-    - name: SSH connection to Actions
-      uses: P3TERX/ssh2actions@v1.0.0
-      if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
-      env:
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+    # ========== 强制修正内核配置（关键步骤） ==========
+    - name: Force correct kernel config (enable Airoha drivers and SPI NAND as modules)
+      run: |
+        cd openwrt
+        # 追加必须的内核配置（确保作为模块编译）
+        cat >> .config << 'EOF'
+        # Force Airoha Ethernet/NPU/Switch/PHY as modules
+        CONFIG_NET_VENDOR_AIROHA=y
+        CONFIG_AIROHA_ETH=m
+        CONFIG_AIROHA_NPU=m
+        CONFIG_AIROHA_SWITCH=m
+        CONFIG_PHY_AIROHA_EN8811H=m
+        # SPI NAND as module
+        CONFIG_MTD_SPI_NAND=m
+        CONFIG_SPI_MEM=y
+        EOF
+        # 将新配置生效（非交互）
+        make olddefconfig
+        # 验证关键配置是否已生效
+        echo "=== Kernel config verification ==="
+        grep -E "CONFIG_AIROHA_ETH|CONFIG_AIROHA_NPU|CONFIG_AIROHA_SWITCH|CONFIG_PHY_AIROHA_EN8811H|CONFIG_MTD_SPI_NAND|CONFIG_SPI_MEM" .config || true
+    # ===============================================
 
     - name: Download package
       id: package
       run: |
         cd openwrt
-        make defconfig
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
@@ -145,7 +168,7 @@ jobs:
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
-        
+
     - name: Check space usage
       if: (!cancelled())
       run: df -hT
