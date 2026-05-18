@@ -89,7 +89,7 @@ jobs:
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
         cd openwrt
-        # 解压设备补丁包（包含设备树、files配置文件，不包含闪存驱动补丁）
+        # 解压设备补丁包（包含设备树、files配置文件）
         tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz
 
     - name: Enable build ccache
@@ -120,17 +120,23 @@ jobs:
         $GITHUB_WORKSPACE/$DIY_P2_SH
         make defconfig
 
-    # ========== 强制启用 Airoha 网络驱动（不涉及闪存补丁） ==========
+    # ========== 强制启用 Airoha 网络驱动（仅修改内核配置） ==========
     - name: Force enable Airoha network driver
       run: |
         cd openwrt
-        # 使用 scripts/config 工具安全地设置内核选项为模块
-        ./scripts/config --module CONFIG_AIROHA_ETH
-        ./scripts/config --enable CONFIG_NET_VENDOR_AIROHA
-        ./scripts/config --module CONFIG_AIROHA_NPU
-        ./scripts/config --module CONFIG_AIROHA_SWITCH
-        ./scripts/config --module CONFIG_PHY_AIROHA_EN8811H
-        # 重新生成最终配置（非交互）
+        # 移除可能冲突的旧配置
+        sed -i '/CONFIG_AIROHA_ETH/d' .config
+        sed -i '/CONFIG_NET_VENDOR_AIROHA/d' .config
+        sed -i '/CONFIG_AIROHA_NPU/d' .config
+        sed -i '/CONFIG_AIROHA_SWITCH/d' .config
+        sed -i '/CONFIG_PHY_AIROHA_EN8811H/d' .config
+        # 添加正确的配置（网络驱动编译为模块）
+        echo 'CONFIG_AIROHA_ETH=m' >> .config
+        echo 'CONFIG_NET_VENDOR_AIROHA=y' >> .config
+        echo 'CONFIG_AIROHA_NPU=m' >> .config
+        echo 'CONFIG_AIROHA_SWITCH=m' >> .config
+        echo 'CONFIG_PHY_AIROHA_EN8811H=m' >> .config
+        # 重新生成最终配置
         make olddefconfig
         echo "=== Network driver configuration ==="
         grep -E "CONFIG_AIROHA_ETH|CONFIG_PHY_AIROHA_EN8811H" .config || true
