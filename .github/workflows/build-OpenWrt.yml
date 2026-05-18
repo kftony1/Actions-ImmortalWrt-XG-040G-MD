@@ -8,7 +8,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 
-name: Build openwrt
+name: Build OpenWrt
 
 on:
   repository_dispatch:
@@ -23,10 +23,10 @@ on:
     - cron: 0 8 * * 1
 
 env:
-  REPO_URL: https://github.com/openwrt/openwrt.git    # 官方 OpenWrt 源码
-  REPO_BRANCH: main                                    # 使用 main 分支
+  REPO_URL: https://github.com/openwrt/openwrt.git
+  REPO_BRANCH: openwrt-24.10                       # 24.10 稳定版（内核 6.12）
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: openwrt.config          # 仓库根目录的 openwrt.config
+  CONFIG_FILE: openwrt.config                      # 仓库根目录的 openwrt.config
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
   UPLOAD_BIN_DIR: true
@@ -88,9 +88,7 @@ jobs:
         df -hT $PWD
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
-        cd openwrt
-        # 解压设备补丁包（包含设备树、files配置文件）
-        tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz
+        tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz -C /workdir/openwrt
 
     - name: Enable build ccache
       uses: klever1988/cachewrtbuild@main
@@ -101,7 +99,7 @@ jobs:
 
     - name: Load custom feeds
       run: |
-        [ -e $FEEDS_CONF ] && cp $FEEDS_CONF openwrt/feeds.conf.default
+        [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
         chmod +x $DIY_P1_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
@@ -112,39 +110,26 @@ jobs:
     - name: Install feeds
       run: cd openwrt && ./scripts/feeds install -a
 
-    - name: Load custom configuration and defconfig
+    - name: Load custom configuration
       run: |
+        # [ -e files ] && mv files openwrt/files   # 注释掉，因为 files 文件夹不存在
+        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
+        chmod +x $DIY_P2_SH
         cd openwrt
-        [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
-        chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
         $GITHUB_WORKSPACE/$DIY_P2_SH
-        make defconfig
 
-    - name: Force enable Airoha network driver
-      run: |
-        cd openwrt
-        # 移除可能冲突的旧配置
-        sed -i '/CONFIG_AIROHA_ETH/d' .config
-        sed -i '/CONFIG_NET_VENDOR_AIROHA/d' .config
-        sed -i '/CONFIG_AIROHA_NPU/d' .config
-        sed -i '/CONFIG_AIROHA_SWITCH/d' .config
-        sed -i '/CONFIG_PHY_AIROHA_EN8811H/d' .config
-        # 添加正确的配置（网络驱动编译为模块）
-        echo 'CONFIG_AIROHA_ETH=m' >> .config
-        echo 'CONFIG_NET_VENDOR_AIROHA=y' >> .config
-        echo 'CONFIG_AIROHA_NPU=m' >> .config
-        echo 'CONFIG_AIROHA_SWITCH=m' >> .config
-        echo 'CONFIG_PHY_AIROHA_EN8811H=m' >> .config
-        # 禁用有问题的 onionshare-cli 包（避免依赖错误）
-        sed -i '/CONFIG_PACKAGE_onionshare-cli/d' .config
-        echo '# CONFIG_PACKAGE_onionshare-cli is not set' >> .config
-        echo "=== Network driver configuration ==="
-        grep -E "CONFIG_AIROHA_ETH|CONFIG_PHY_AIROHA_EN8811H" .config || true
+    - name: SSH connection to Actions
+      uses: P3TERX/ssh2actions@v1.0.0
+      if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
+      env:
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
     - name: Download package
       id: package
       run: |
         cd openwrt
+        make defconfig
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
@@ -159,21 +144,21 @@ jobs:
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
-
+        
     - name: Check space usage
       if: (!cancelled())
       run: df -hT
 
     - name: Upload bin directory
       uses: actions/upload-artifact@main
-      if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
         name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: openwrt/bin
 
     - name: Organize files
       id: organize
-      if: env.UPLOAD_FIRMWARE
+      if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
       run: |
         cd openwrt/bin/targets/*/*
         rm -rf packages
@@ -182,14 +167,14 @@ jobs:
 
     - name: Upload firmware directory
       uses: actions/upload-artifact@main
-      if: steps.organize.outputs.status == 'success' && env.UPLOAD_FIRMWARE
+      if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
         name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
 
     - name: Generate release tag
       id: tag
-      if: env.UPLOAD_RELEASE
+      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
         echo "release_tag=XG-040G-MD-$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
         touch release.txt
@@ -197,7 +182,7 @@ jobs:
 
     - name: Upload firmware to release
       uses: softprops/action-gh-release@v1
-      if: steps.tag.outputs.status == 'success' && env.UPLOAD_RELEASE
+      if: steps.tag.outputs.status == 'success' && !cancelled()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
