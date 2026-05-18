@@ -120,7 +120,6 @@ jobs:
         $GITHUB_WORKSPACE/$DIY_P2_SH
         make defconfig
 
-    # ========== 强制启用 Airoha 网络驱动（仅修改内核配置） ==========
     - name: Force enable Airoha network driver
       run: |
         cd openwrt
@@ -136,11 +135,11 @@ jobs:
         echo 'CONFIG_AIROHA_NPU=m' >> .config
         echo 'CONFIG_AIROHA_SWITCH=m' >> .config
         echo 'CONFIG_PHY_AIROHA_EN8811H=m' >> .config
-        # 重新生成最终配置
-        make olddefconfig
+        # 禁用有问题的 onionshare-cli 包（避免依赖错误）
+        sed -i '/CONFIG_PACKAGE_onionshare-cli/d' .config
+        echo '# CONFIG_PACKAGE_onionshare-cli is not set' >> .config
         echo "=== Network driver configuration ==="
         grep -E "CONFIG_AIROHA_ETH|CONFIG_PHY_AIROHA_EN8811H" .config || true
-    # ============================================================
 
     - name: Download package
       id: package
