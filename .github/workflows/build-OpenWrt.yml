@@ -88,25 +88,15 @@ jobs:
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
         cd openwrt
-        tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz 2>/dev/null || true
+        # 解压补丁包（应包含 target/linux/airoha/dts/ 和 files/ 等）
+        tar -xzf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz -C /workdir/openwrt --overwrite
 
-    - name: Create missing device tree (if not exists)
-      run: |
-        cd openwrt/target/linux/airoha/dts
-        if [ ! -f an7581-bell_xg-040g-md.dts ]; then
-          echo "Creating an7581-bell_xg-040g-md.dts from an7581-evb.dts"
-          cp an7581-evb.dts an7581-bell_xg-040g-md.dts
-          sed -i 's/an7581-evb/an7581-bell_xg-040g-md/g' an7581-bell_xg-040g-md.dts
-          sed -i 's/airoha,an7581-evb/bell,xg-040g-md/g' an7581-bell_xg-040g-md.dts
-        else
-          echo "Device tree already exists"
-        fi
-
-    - name: Fix image Makefile (remove invalid dtb references)
+    - name: Fix missing device tree references in Makefile
       run: |
         cd openwrt/target/linux/airoha/image
-        sed -i '/an7581-evb-emmc-eagle/d' Makefile
-        sed -i '/an7581-evb-emmc/d' Makefile
+        # 注释掉可能导致编译中断的缺失设备树
+        sed -i 's/^.*an7581-evb-emmc-eagle.*$/# &/' Makefile || true
+        sed -i 's/^.*an7581-evb-emmc.*$/# &/' Makefile || true
 
     - name: Enable build ccache
       uses: klever1988/cachewrtbuild@main
@@ -150,20 +140,13 @@ jobs:
         echo 'CONFIG_NET_VENDOR_AIROHA=y' >> .config
         make olddefconfig
 
-    - name: Diagnose Airoha configuration (optional)
+    - name: Diagnose Airoha driver (optional)
       run: |
         cd openwrt
         echo "=== Final kernel config (AIROHA) ==="
         grep -E "CONFIG_AIROHA_ETH|CONFIG_AIROHA_NPU|CONFIG_PHY_AIROHA_EN8811H" .config || echo "NOT FOUND"
-        echo "=== Driver source check ==="
-        find target/linux/airoha -name "airoha-eth.c" | head -1 || echo "MISSING"
-
-    - name: SSH connection to Actions (optional)
-      uses: P3TERX/ssh2actions@v1.0.0
-      if: github.event.inputs.ssh == 'true'
-      env:
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        echo "=== Device tree check ==="
+        ls -la target/linux/airoha/dts/an7581-bell_xg-040g-md.dts || echo "Device tree may be missing"
 
     - name: Download package
       run: |
