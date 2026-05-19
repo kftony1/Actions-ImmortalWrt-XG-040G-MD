@@ -88,13 +88,11 @@ jobs:
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
         cd openwrt
-        # 解压补丁包（应包含 target/linux/airoha/dts/ 和 files/ 等）
         tar -xzf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz -C /workdir/openwrt --overwrite
 
     - name: Fix missing device tree references in Makefile
       run: |
         cd openwrt/target/linux/airoha/image
-        # 注释掉可能导致编译中断的缺失设备树
         sed -i 's/^.*an7581-evb-emmc-eagle.*$/# &/' Makefile || true
         sed -i 's/^.*an7581-evb-emmc.*$/# &/' Makefile || true
 
@@ -124,7 +122,7 @@ jobs:
         [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
         chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
         $GITHUB_WORKSPACE/$DIY_P2_SH
-        make defconfig
+        # 注意：不运行 make defconfig，避免覆盖配置
 
     - name: Force target device and Airoha drivers
       run: |
@@ -138,7 +136,7 @@ jobs:
         sed -i 's/CONFIG_AIROHA_SWITCH=m/CONFIG_AIROHA_SWITCH=y/g' .config
         sed -i 's/CONFIG_PHY_AIROHA_EN8811H=m/CONFIG_PHY_AIROHA_EN8811H=y/g' .config
         echo 'CONFIG_NET_VENDOR_AIROHA=y' >> .config
-        make olddefconfig
+        # 不运行 olddefconfig，直接编译
 
     - name: Diagnose Airoha driver (optional)
       run: |
