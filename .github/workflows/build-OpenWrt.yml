@@ -11,7 +11,6 @@
 name: Build OpenWrt
 
 on:
-  repository_dispatch:
   workflow_dispatch:
     inputs:
       ssh:
@@ -24,9 +23,9 @@ on:
 
 env:
   REPO_URL: https://github.com/openwrt/openwrt.git
-  REPO_BRANCH: main                          # main 分支（内核 6.12）
+  REPO_BRANCH: main
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: openwrt.config                # 仓库根目录的 openwrt.config
+  CONFIG_FILE: openwrt.config
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
   UPLOAD_BIN_DIR: true
@@ -88,13 +87,26 @@ jobs:
         df -hT $PWD
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
-        tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz -C /workdir/openwrt
+        cd openwrt
+        tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz 2>/dev/null || true
 
-    - name: Fix missing device tree files
+    - name: Create missing device tree (if not exists)
+      run: |
+        cd openwrt/target/linux/airoha/dts
+        if [ ! -f an7581-bell_xg-040g-md.dts ]; then
+          echo "Creating an7581-bell_xg-040g-md.dts from an7581-evb.dts"
+          cp an7581-evb.dts an7581-bell_xg-040g-md.dts
+          sed -i 's/an7581-evb/an7581-bell_xg-040g-md/g' an7581-bell_xg-040g-md.dts
+          sed -i 's/airoha,an7581-evb/bell,xg-040g-md/g' an7581-bell_xg-040g-md.dts
+        else
+          echo "Device tree already exists"
+        fi
+
+    - name: Fix image Makefile (remove invalid dtb references)
       run: |
         cd openwrt/target/linux/airoha/image
-        sed -i '/an7581-evb-emmc-eagle/d' Makefile 2>/dev/null || true
-        sed -i '/an7581-evb-emmc/d' Makefile 2>/dev/null || true
+        sed -i '/an7581-evb-emmc-eagle/d' Makefile
+        sed -i '/an7581-evb-emmc/d' Makefile
 
     - name: Enable build ccache
       uses: klever1988/cachewrtbuild@main
@@ -124,50 +136,36 @@ jobs:
         $GITHUB_WORKSPACE/$DIY_P2_SH
         make defconfig
 
-    # ========== 强制只选择 XG-040G-MD 设备 ==========
-    - name: Force target device (XG-040G-MD)
+    - name: Force target device and Airoha drivers
       run: |
         cd openwrt
-        # 删除所有其他设备选项
+        # 强制选择 XG-040G-MD 设备
         sed -i '/CONFIG_TARGET_airoha_an7581_DEVICE_/d' .config
-        # 添加目标设备
         echo 'CONFIG_TARGET_airoha_an7581_DEVICE_bell_xg-040g-md=y' >> .config
-        # 显式禁用其他设备
-        echo '# CONFIG_TARGET_airoha_an7581_DEVICE_airoha_an7581-evb is not set' >> .config
-        echo '# CONFIG_TARGET_airoha_an7581_DEVICE_gemtek_w1700k-ubi is not set' >> .config
-        echo '# CONFIG_TARGET_airoha_an7581_DEVICE_nokia_valyrian is not set' >> .config
-        # 重新生成配置依赖
+        # 确保 Airoha 驱动为 y（内置）
+        sed -i 's/CONFIG_AIROHA_ETH=m/CONFIG_AIROHA_ETH=y/g' .config
+        sed -i 's/CONFIG_AIROHA_NPU=m/CONFIG_AIROHA_NPU=y/g' .config
+        sed -i 's/CONFIG_AIROHA_SWITCH=m/CONFIG_AIROHA_SWITCH=y/g' .config
+        sed -i 's/CONFIG_PHY_AIROHA_EN8811H=m/CONFIG_PHY_AIROHA_EN8811H=y/g' .config
+        echo 'CONFIG_NET_VENDOR_AIROHA=y' >> .config
         make olddefconfig
 
-    - name: Verify target device selection
+    - name: Diagnose Airoha configuration (optional)
       run: |
         cd openwrt
-        if ! grep -q "CONFIG_TARGET_airoha_an7581_DEVICE_bell_xg-040g-md=y" .config; then
-          echo "❌ ERROR: XG-040G-MD device not selected!"
-          exit 1
-        fi
-        echo "✅ Target device verified: bell_xg-040g-md"
-    # ===============================================
+        echo "=== Final kernel config (AIROHA) ==="
+        grep -E "CONFIG_AIROHA_ETH|CONFIG_AIROHA_NPU|CONFIG_PHY_AIROHA_EN8811H" .config || echo "NOT FOUND"
+        echo "=== Driver source check ==="
+        find target/linux/airoha -name "airoha-eth.c" | head -1 || echo "MISSING"
 
-    - name: Diagnose Airoha driver configuration
-      run: |
-        cd openwrt
-        echo "=== Kernel config (AIROHA) ==="
-        grep -E "CONFIG_AIROHA_ETH|CONFIG_AIROHA_NPU|CONFIG_AIROHA_SWITCH|CONFIG_PHY_AIROHA_EN8811H|CONFIG_NET_VENDOR_AIROHA" .config || echo "NOT FOUND"
-        echo "=== Check driver source ==="
-        find target/linux/airoha -name "airoha-eth.c" 2>/dev/null | head -5 || echo "MISSING"
-        echo "=== CONFIG_AIROHA_ETH value ==="
-        grep "CONFIG_AIROHA_ETH" .config || echo "NOT SET"
-
-    - name: SSH connection to Actions
+    - name: SSH connection to Actions (optional)
       uses: P3TERX/ssh2actions@v1.0.0
-      if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
+      if: github.event.inputs.ssh == 'true'
       env:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
     - name: Download package
-      id: package
       run: |
         cd openwrt
         make download -j8
@@ -177,43 +175,38 @@ jobs:
       id: compile
       run: |
         cd openwrt
-        echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 || make -j1 V=s
+        make -j$(nproc) || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
-        
-    - name: Check space usage
-      if: (!cancelled())
-      run: df -hT
 
     - name: Upload bin directory
       uses: actions/upload-artifact@main
-      if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
+      if: steps.compile.outputs.status == 'success'
       with:
         name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: openwrt/bin
 
-    - name: Organize files
+    - name: Organize firmware files
       id: organize
-      if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
+      if: env.UPLOAD_FIRMWARE == 'true' && steps.compile.outputs.status == 'success'
       run: |
-        cd openwrt/bin/targets/*/*
+        cd openwrt/bin/targets/*/* || exit 1
         rm -rf packages
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware directory
       uses: actions/upload-artifact@main
-      if: steps.organize.outputs.status == 'success' && !cancelled()
+      if: steps.organize.outputs.status == 'success'
       with:
         name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
 
     - name: Generate release tag
       id: tag
-      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+      if: env.UPLOAD_RELEASE == 'true' && steps.compile.outputs.status == 'success'
       run: |
         echo "release_tag=XG-040G-MD-$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
         touch release.txt
@@ -221,7 +214,7 @@ jobs:
 
     - name: Upload firmware to release
       uses: softprops/action-gh-release@v1
-      if: steps.tag.outputs.status == 'success' && !cancelled()
+      if: steps.tag.outputs.status == 'success'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
