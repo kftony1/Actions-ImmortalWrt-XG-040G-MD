@@ -5,7 +5,7 @@ on:
 
 env:
   REPO_URL: https://github.com/openwrt/openwrt.git
-  REPO_BRANCH: main
+  REPO_BRANCH: openwrt-24.10
   CONFIG_FILE: openwrt.config
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
@@ -36,8 +36,14 @@ jobs:
         tar -xzf ${{ github.workspace }}/XG-040G-MD.tar.gz --overwrite
         echo "=== 设备树检查 ==="
         ls -la target/linux/airoha/dts/an7581-bell_xg-040g-md.dts || echo "设备树不存在"
-        echo "=== 补丁文件检查 ==="
-        ls target/linux/airoha/patches-6.12/ | wc -l
+
+    - name: Fix missing device tree references
+      run: |
+        cd openwrt/target/linux/airoha/image
+        # 删除其他设备的引用，只保留 XG-040G-MD
+        sed -i '/an7581-evb/d' Makefile 2>/dev/null || true
+        sed -i '/w1700k/d' Makefile 2>/dev/null || true
+        sed -i '/valyrian/d' Makefile 2>/dev/null || true
 
     - name: Run diy-part1.sh
       run: |
@@ -62,11 +68,18 @@ jobs:
         chmod +x ${{ github.workspace }}/${{ env.DIY_P2_SH }}
         ${{ github.workspace }}/${{ env.DIY_P2_SH }}
 
-    - name: Configure
+    - name: Configure (force only XG-040G-MD)
       run: |
         cd openwrt
+        # 强制只选择 XG-040G-MD
+        sed -i '/CONFIG_TARGET_airoha_an7581_DEVICE_/d' .config
+        echo 'CONFIG_TARGET_airoha_an7581_DEVICE_bell_xg-040g-md=y' >> .config
+        echo 'CONFIG_TARGET_airoha=y' >> .config
+        echo 'CONFIG_TARGET_airoha_an7581=y' >> .config
+        # 禁用多设备支持
+        echo '# CONFIG_TARGET_MULTI_PROFILE is not set' >> .config
         make defconfig
-        echo "=== 设备配置验证 ==="
+        echo "=== 最终设备验证 ==="
         grep "CONFIG_TARGET_airoha_an7581_DEVICE" .config
 
     - name: Download
@@ -86,13 +99,13 @@ jobs:
       run: |
         cd openwrt/bin/targets/airoha/an7581
         echo "=== 固件列表 ==="
-        ls -lh
+        ls -lh *bell_xg-040g-md* 2>/dev/null || ls -lh
         echo "=== 固件大小 ==="
-        du -sh openwrt-*-sysupgrade.bin 2>/dev/null || echo "未找到 sysupgrade"
+        du -sh *sysupgrade.bin 2>/dev/null || echo "未找到 sysupgrade"
 
     - name: Upload
       uses: actions/upload-artifact@v4
       if: steps.build.outputs.status == 'success'
       with:
-        name: OpenWrt_firmware
-        path: openwrt/bin/targets/*/*
+        name: XG-040G-MD-firmware
+        path: openwrt/bin/targets/*/*bell_xg-040g-md*
