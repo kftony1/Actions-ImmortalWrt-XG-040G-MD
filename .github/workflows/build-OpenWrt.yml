@@ -96,31 +96,28 @@ jobs:
         sed -i 's/^.*an7581-evb-emmc-eagle.*$/# &/' Makefile || true
         sed -i 's/^.*an7581-evb-emmc.*$/# &/' Makefile || true
 
-    - name: Generate base configuration
+    - name: Configure firmware
       run: |
         cd openwrt
+        # 生成基础配置
         echo "CONFIG_TARGET_airoha=y" > .config
         echo "CONFIG_TARGET_airoha_an7581=y" >> .config
         echo "CONFIG_TARGET_airoha_an7581_DEVICE_bell_xg-040g-md=y" >> .config
+        # 运行 defconfig
         make defconfig
-
-    - name: Merge custom configuration
-      run: |
-        cd openwrt
-        if [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ]; then
-          ./scripts/kconfig/merge_config.sh -m .config $GITHUB_WORKSPACE/$CONFIG_FILE
-        fi
-        ./scripts/kconfig/merge_config.sh -m .config - << 'EOF'
+        # 合并用户配置（直接追加）
+        [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cat $GITHUB_WORKSPACE/$CONFIG_FILE >> .config
+        # 强制添加 Airoha 驱动配置
+        cat >> .config << 'EOF'
 CONFIG_AIROHA_ETH=y
 CONFIG_AIROHA_NPU=y
 CONFIG_AIROHA_SWITCH=y
 CONFIG_PHY_AIROHA_EN8811H=y
 CONFIG_NET_VENDOR_AIROHA=y
-EOF
-        ./scripts/kconfig/merge_config.sh -m .config - << 'EOF'
 # CONFIG_PACKAGE_onionshare-cli is not set
 EOF
-        make oldconfig < /dev/null || true
+        # 非交互式更新配置
+        yes "" | make oldconfig
 
     - name: Enable build ccache
       uses: klever1988/cachewrtbuild@main
