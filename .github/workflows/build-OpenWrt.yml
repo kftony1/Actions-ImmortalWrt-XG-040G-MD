@@ -99,22 +99,17 @@ jobs:
     - name: Generate base configuration
       run: |
         cd openwrt
-        # 先创建基础配置
         echo "CONFIG_TARGET_airoha=y" > .config
         echo "CONFIG_TARGET_airoha_an7581=y" >> .config
         echo "CONFIG_TARGET_airoha_an7581_DEVICE_bell_xg-040g-md=y" >> .config
-        # 运行 defconfig 生成完整配置
         make defconfig
 
     - name: Merge custom configuration
       run: |
         cd openwrt
-        # 合并用户配置（如果存在）
         if [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ]; then
-          # 使用 merge_config.sh 安全合并
           ./scripts/kconfig/merge_config.sh -m .config $GITHUB_WORKSPACE/$CONFIG_FILE
         fi
-        # 强制确保 Airoha 驱动为 y（内置）
         ./scripts/kconfig/merge_config.sh -m .config - << 'EOF'
 CONFIG_AIROHA_ETH=y
 CONFIG_AIROHA_NPU=y
@@ -122,11 +117,9 @@ CONFIG_AIROHA_SWITCH=y
 CONFIG_PHY_AIROHA_EN8811H=y
 CONFIG_NET_VENDOR_AIROHA=y
 EOF
-        # 禁用 onionshare-cli（避免警告）
         ./scripts/kconfig/merge_config.sh -m .config - << 'EOF'
 # CONFIG_PACKAGE_onionshare-cli is not set
 EOF
-        # 最终更新配置
         make oldconfig < /dev/null || true
 
     - name: Enable build ccache
