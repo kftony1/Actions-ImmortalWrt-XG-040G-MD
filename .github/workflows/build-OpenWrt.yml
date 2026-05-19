@@ -24,9 +24,9 @@ on:
 
 env:
   REPO_URL: https://github.com/openwrt/openwrt.git
-  REPO_BRANCH:  main              # 24.10 稳定版（内核 6.12）
+  REPO_BRANCH: main                          # main 分支（内核 6.12）
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: openwrt.config                      # 仓库根目录的 openwrt.config
+  CONFIG_FILE: openwrt.config                # 仓库根目录的 openwrt.config
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
   UPLOAD_BIN_DIR: true
@@ -90,6 +90,12 @@ jobs:
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
         tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz -C /workdir/openwrt
 
+    - name: Fix missing device tree files
+      run: |
+        cd openwrt/target/linux/airoha/image
+        sed -i '/an7581-evb-emmc-eagle/d' Makefile 2>/dev/null || true
+        sed -i '/an7581-evb-emmc/d' Makefile 2>/dev/null || true
+
     - name: Enable build ccache
       uses: klever1988/cachewrtbuild@main
       with:
@@ -112,11 +118,46 @@ jobs:
 
     - name: Load custom configuration
       run: |
-        # [ -e files ] && mv files openwrt/files   # 注释掉，因为 files 文件夹不存在
-        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
-        chmod +x $DIY_P2_SH
         cd openwrt
+        [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
+        chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
         $GITHUB_WORKSPACE/$DIY_P2_SH
+        make defconfig
+
+    # ========== 强制只选择 XG-040G-MD 设备 ==========
+    - name: Force target device (XG-040G-MD)
+      run: |
+        cd openwrt
+        # 删除所有其他设备选项
+        sed -i '/CONFIG_TARGET_airoha_an7581_DEVICE_/d' .config
+        # 添加目标设备
+        echo 'CONFIG_TARGET_airoha_an7581_DEVICE_bell_xg-040g-md=y' >> .config
+        # 显式禁用其他设备
+        echo '# CONFIG_TARGET_airoha_an7581_DEVICE_airoha_an7581-evb is not set' >> .config
+        echo '# CONFIG_TARGET_airoha_an7581_DEVICE_gemtek_w1700k-ubi is not set' >> .config
+        echo '# CONFIG_TARGET_airoha_an7581_DEVICE_nokia_valyrian is not set' >> .config
+        # 重新生成配置依赖
+        make olddefconfig
+
+    - name: Verify target device selection
+      run: |
+        cd openwrt
+        if ! grep -q "CONFIG_TARGET_airoha_an7581_DEVICE_bell_xg-040g-md=y" .config; then
+          echo "❌ ERROR: XG-040G-MD device not selected!"
+          exit 1
+        fi
+        echo "✅ Target device verified: bell_xg-040g-md"
+    # ===============================================
+
+    - name: Diagnose Airoha driver configuration
+      run: |
+        cd openwrt
+        echo "=== Kernel config (AIROHA) ==="
+        grep -E "CONFIG_AIROHA_ETH|CONFIG_AIROHA_NPU|CONFIG_AIROHA_SWITCH|CONFIG_PHY_AIROHA_EN8811H|CONFIG_NET_VENDOR_AIROHA" .config || echo "NOT FOUND"
+        echo "=== Check driver source ==="
+        find target/linux/airoha -name "airoha-eth.c" 2>/dev/null | head -5 || echo "MISSING"
+        echo "=== CONFIG_AIROHA_ETH value ==="
+        grep "CONFIG_AIROHA_ETH" .config || echo "NOT SET"
 
     - name: SSH connection to Actions
       uses: P3TERX/ssh2actions@v1.0.0
@@ -129,9 +170,7 @@ jobs:
       id: package
       run: |
         cd openwrt
-        make defconfig
         make download -j8
-        find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
 
     - name: Compile the firmware
