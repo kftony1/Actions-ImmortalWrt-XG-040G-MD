@@ -122,7 +122,6 @@ jobs:
         [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
         chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
         $GITHUB_WORKSPACE/$DIY_P2_SH
-        make defconfig
 
     - name: Force target device and Airoha drivers
       run: |
@@ -142,11 +141,6 @@ jobs:
         echo 'CONFIG_AIROHA_SWITCH=y' >> .config
         echo 'CONFIG_PHY_AIROHA_EN8811H=y' >> .config
         echo 'CONFIG_NET_VENDOR_AIROHA=y' >> .config
-        # 再次运行 defconfig 使修改生效
-        make defconfig
-        # 验证配置
-        echo "=== Verification after defconfig ==="
-        grep -E "CONFIG_AIROHA_ETH|CONFIG_NET_VENDOR_AIROHA" .config || echo "WARNING: Airoha config still missing"
 
     - name: Diagnose Airoha driver (optional)
       run: |
