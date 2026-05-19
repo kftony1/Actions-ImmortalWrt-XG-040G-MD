@@ -130,14 +130,23 @@ jobs:
         # 强制选择 XG-040G-MD 设备
         sed -i '/CONFIG_TARGET_airoha_an7581_DEVICE_/d' .config
         echo 'CONFIG_TARGET_airoha_an7581_DEVICE_bell_xg-040g-md=y' >> .config
-        # 确保 Airoha 驱动为 y（内置）
-        sed -i 's/CONFIG_AIROHA_ETH=m/CONFIG_AIROHA_ETH=y/g' .config
-        sed -i 's/CONFIG_AIROHA_NPU=m/CONFIG_AIROHA_NPU=y/g' .config
-        sed -i 's/CONFIG_AIROHA_SWITCH=m/CONFIG_AIROHA_SWITCH=y/g' .config
-        sed -i 's/CONFIG_PHY_AIROHA_EN8811H=m/CONFIG_PHY_AIROHA_EN8811H=y/g' .config
+        # 删除可能存在的旧配置
+        sed -i '/CONFIG_AIROHA_ETH/d' .config
+        sed -i '/CONFIG_AIROHA_NPU/d' .config
+        sed -i '/CONFIG_AIROHA_SWITCH/d' .config
+        sed -i '/CONFIG_PHY_AIROHA_EN8811H/d' .config
+        sed -i '/CONFIG_NET_VENDOR_AIROHA/d' .config
+        # 强制写入新配置（编译进内核）
+        echo 'CONFIG_AIROHA_ETH=y' >> .config
+        echo 'CONFIG_AIROHA_NPU=y' >> .config
+        echo 'CONFIG_AIROHA_SWITCH=y' >> .config
+        echo 'CONFIG_PHY_AIROHA_EN8811H=y' >> .config
         echo 'CONFIG_NET_VENDOR_AIROHA=y' >> .config
         # 再次运行 defconfig 使修改生效
         make defconfig
+        # 验证配置
+        echo "=== Verification after defconfig ==="
+        grep -E "CONFIG_AIROHA_ETH|CONFIG_NET_VENDOR_AIROHA" .config || echo "WARNING: Airoha config still missing"
 
     - name: Diagnose Airoha driver (optional)
       run: |
