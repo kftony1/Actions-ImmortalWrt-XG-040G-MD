@@ -7,13 +7,17 @@ echo "=========================================="
 echo "XG-040G-MD 设备配置验证"
 echo "=========================================="
 
-cd $GITHUB_WORKSPACE/openwrt
+# 注意：此时已经在 openwrt/ 目录下，不需要 cd
+echo "当前目录: $(pwd)"
 
 echo "=== 检查设备树文件 ==="
 if [ -f target/linux/airoha/dts/an7581-bell_xg-040g-md.dts ]; then
     echo "✅ 设备树文件已找到"
 else
     echo "⚠️ 警告: 设备树文件未找到"
+    # 列出可能的目录结构
+    echo "target/linux/airoha/dts/ 目录内容:"
+    ls -la target/linux/airoha/dts/ 2>/dev/null || echo "目录不存在"
 fi
 
 echo ""
