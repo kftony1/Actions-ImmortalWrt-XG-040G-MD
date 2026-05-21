@@ -1,9 +1,6 @@
 #
 # Nokia Bell XG-040G-MD 专用云编译配置（复旦微闪存版）
-# 基于 P3TERX/Actions-OpenWrt 模板
-# 内核版本: 6.12.74 | 源码分支: openwrt-25.12
-# 支持: NPU驱动 | 超频 | IPv6 | USB网络共享
-# 闪存修复: 复旦微 FM25G02BI3 (禁用 AFE)
+# 使用仓库中的 XG-040G-MD.tar.gz 作为 DTS 源
 #
 
 name: Build ImmortalWrt for XG-040G-MD
@@ -21,14 +18,11 @@ on:
     - cron: 0 20 * * 0
 
 env:
-  # ========== 核心配置 ==========
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: openwrt-25.12
   CONFIG_FILE: immortalwrt.config
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
-  
-  # ========== 上传配置 ==========
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
@@ -42,7 +36,6 @@ jobs:
     - name: 检出代码
       uses: actions/checkout@main
 
-    # ---------- 环境初始化 ----------
     - name: 初始化编译环境
       env:
         DEBIAN_FRONTEND: noninteractive
@@ -65,53 +58,59 @@ jobs:
     - name: 克隆 ImmortalWrt 源码
       run: |
         git clone $REPO_URL -b $REPO_BRANCH openwrt
-        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt 2>/dev/null || true
-        # 创建软链接的备用方案
-        if [ ! -L "$GITHUB_WORKSPACE/openwrt" ]; then
-          ln -sf $(pwd)/openwrt $GITHUB_WORKSPACE/openwrt
-        fi
-
-    # ---------- 复旦微闪存修复（关键！）----------
-    - name: 复旦微闪存修复 (FM25G02BI3)
+        ln -sf $(pwd)/openwrt $GITHUB_WORKSPACE/openwrt
+        
+    # ---------- 解压自定义 DTS 文件（关键！）----------
+    - name: 解压自定义 DTS 文件
       run: |
-        DTS_FILE="openwrt/target/linux/airoha/dts/an7581-bell_xg-040g-md.dts"
-        
         echo "=========================================="
-        echo "复旦微闪存修复 (FM25G02BI3)"
+        echo "解压 XG-040G-MD 自定义 DTS 文件"
         echo "=========================================="
         
-        if [ ! -f "$DTS_FILE" ]; then
-          echo "❌ 错误: 找不到设备树文件"
-          echo "尝试查找..."
-          find openwrt -name "*xg-040g-md*" 2>/dev/null
-          exit 1
+        if [ -f "$GITHUB_WORKSPACE/XG-040G-MD.tar.gz" ]; then
+            echo "✅ 找到压缩包: XG-040G-MD.tar.gz"
+            tar -xzvf "$GITHUB_WORKSPACE/XG-040G-MD.tar.gz" -C openwrt/
+            echo "✅ 解压完成"
+            
+            # 验证 DTS 文件
+            DTS_FILE="openwrt/target/linux/airoha/dts/an7581-bell_xg-040g-md.dts"
+            if [ -f "$DTS_FILE" ]; then
+                echo "✅ DTS 文件已更新"
+            else
+                echo "⚠️ 查找实际位置..."
+                find openwrt -name "*.dts" | head -5
+            fi
+        else
+            echo "❌ 错误: 找不到 XG-040G-MD.tar.gz"
+            exit 1
+        fi
+
+    # ---------- 复旦微闪存修复（如需要）----------
+    - name: 复旦微闪存修复检查
+      run: |
+        DTS_FILE=$(find openwrt -name "an7581-bell_xg-040g-md.dts" 2>/dev/null | head -1)
+        
+        if [ -z "$DTS_FILE" ]; then
+            echo "❌ 找不到 DTS 文件"
+            exit 1
         fi
         
-        echo "✅ 找到设备树文件: $DTS_FILE"
+        echo "DTS 文件: $DTS_FILE"
         
-        # 检查是否已存在禁用 AFE 的配置
-        if grep -q "status.*disabled.*afe" "$DTS_FILE" || grep -q "&afe.*disabled" "$DTS_FILE"; then
-          echo "✅ AFE 已禁用，无需修改"
+        if grep -q "disabled" "$DTS_FILE" | grep -q "afe"; then
+            echo "✅ AFE 已禁用"
         else
-          echo "📝 正在添加 AFE 禁用配置..."
-          
-          # 在文件末尾添加禁用 AFE 的配置
-          cat >> "$DTS_FILE" << 'EOF'
+            echo "⚠️ 添加 AFE 禁用..."
+            cat >> "$DTS_FILE" << 'EOF'
 
-/* 复旦微闪存修复：禁用 AFE (Analog Front End) */
-/* 解决 FM25G02BI3 闪存兼容性问题 */
 &afe {
     status = "disabled";
 };
 EOF
-          echo "✅ 已添加复旦微闪存修复"
+            echo "✅ 已添加"
         fi
-        
-        echo ""
-        echo "=== 验证修改 ==="
-        tail -15 "$DTS_FILE"
 
-    # ---------- 自定义 feeds ----------
+    # ---------- 加载自定义 feeds ----------
     - name: 加载自定义 feeds
       run: |
         [ -e feeds.conf.default ] && cp feeds.conf.default openwrt/feeds.conf.default
@@ -189,7 +188,7 @@ EOF
 
 ### ⚠️ 特别注意
 - 本固件专为**复旦微 FM25G02BI3 闪存**适配
-- 已禁用 AFE (Analog Front End) 解决闪存兼容性问题
+- 使用仓库中的自定义 DTS 文件编译
 
 ### 固件特性
 - 源码分支: openwrt-25.12
@@ -198,9 +197,6 @@ EOF
 - 超频支持: 需通过 SoC 插件设置
 - IPv6: 完全支持
 - USB 网络共享: 已支持
-
-### 刷机提示
-刷机后第一次启动可能需要 3-5 分钟，请耐心等待
 EOF
         echo "status=success" >> $GITHUB_OUTPUT
 
