@@ -121,23 +121,48 @@ jobs:
     - name: Install feeds
       run: cd /workdir/openwrt && ./scripts/feeds install -a
 
+    # ============================================
+    # 关键修复：配置加载 + defconfig 立即执行
+    # ============================================
     - name: Load custom configuration
       run: |
         cd /workdir/openwrt
-        # 复制内核配置文件（使用cp保留原始文件）
+        
+        # 1. 复制内核配置文件
         if [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ]; then
           cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
           echo "✓ Config file copied successfully"
         else
           echo "⚠ Warning: $CONFIG_FILE not found, using default config"
         fi
-        # 执行编译后自定义脚本
+        
+        # 2. 执行编译后自定义脚本（添加额外配置）
         if [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ]; then
           chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
           $GITHUB_WORKSPACE/$DIY_P2_SH
+          echo "✓ DIY_P2_SH executed"
         else
           echo "⚠ Warning: $DIY_P2_SH not found, skipping"
         fi
+        
+        # 3. 🔥 关键修复：立即运行 defconfig 固化配置
+        make defconfig
+        echo "✓ defconfig completed - configuration frozen"
+        
+        # 4. 保存最终配置用于调试
+        cp .config defconfig-final.config
+        echo "✓ Final config saved to defconfig-final.config"
+        
+        # 5. 验证关键驱动是否启用
+        echo ""
+        echo "=== 关键驱动验证 ==="
+        for driver in kmod-airoha-eth kmod-airoha-switch kmod-airoha-npu; do
+          if grep -q "CONFIG_PACKAGE_$driver=y" .config; then
+            echo "  ✅ $driver"
+          else
+            echo "  ❌ $driver (MISSING!)"
+          fi
+        done
 
     - name: SSH connection to Actions
       uses: P3TERX/ssh2actions@v1.0.0
@@ -146,11 +171,14 @@ jobs:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
+    # ============================================
+    # 注意：这里不再执行 make defconfig
+    # ============================================
     - name: Download package
       id: package
       run: |
         cd /workdir/openwrt
-        make defconfig
+        # make defconfig  # 🔥 已删除！在上一步已经执行过了
         make download -j8
         # 删除下载失败的小文件（小于1KB）
         find dl -size -1024c -exec ls -l {} \;
