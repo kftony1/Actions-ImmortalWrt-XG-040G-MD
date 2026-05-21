@@ -1,16 +1,10 @@
-#
-# Nokia Bell XG-040G-MD 专用云编译配置（复旦微闪存版）
-# 使用仓库中的 XG-040G-MD.tar.gz 作为 DTS 源
-#
-
 name: Build ImmortalWrt for XG-040G-MD
 
 on:
-  repository_dispatch:
   workflow_dispatch:
     inputs:
       ssh:
-        description: 'SSH 连接 Actions（调试用）'
+        description: 'SSH 连接 Actions'
         required: false
         default: 'false'
         type: boolean
@@ -31,191 +25,62 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
-
     steps:
-    - name: 检出代码
+    - name: Checkout
       uses: actions/checkout@main
-
-    - name: 初始化编译环境
-      env:
-        DEBIAN_FRONTEND: noninteractive
+    - name: Initialization environment
       run: |
         sudo apt update -y
-        sudo apt full-upgrade -y
-        sudo apt install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
-          bzip2 ccache clang cmake cpio curl device-tree-compiler ec2 fastjar flex gawk gettext \
-          gcc-multilib g++-multilib git gnutls-dev gperf haveged help2man intltool libc6-dev-i386 \
-          libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev \
-          libncursesw5 libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lld llvm \
-          lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 \
-          python3-pip python3-ply python3-pyelftools qemu-utils re2c rsync scons squashfs-tools \
-          subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
+        sudo apt install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib g++-multilib git gnutls-dev gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5 libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lld llvm lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pip python3-ply python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
         sudo apt autoremove --purge -y
         sudo apt clean
         sudo timedatectl set-timezone "$TZ"
-
-    # ---------- 克隆源码 ----------
-    - name: 克隆 ImmortalWrt 源码
+    - name: Clone source code
       run: |
         git clone $REPO_URL -b $REPO_BRANCH openwrt
-        ln -sf $(pwd)/openwrt $GITHUB_WORKSPACE/openwrt
-        
-    # ---------- 解压自定义 DTS 文件（关键！）----------
-    - name: 解压自定义 DTS 文件
+    - name: Extract custom files
       run: |
-        echo "=========================================="
-        echo "解压 XG-040G-MD 自定义 DTS 文件"
-        echo "=========================================="
-        
-        if [ -f "$GITHUB_WORKSPACE/XG-040G-MD.tar.gz" ]; then
-            echo "✅ 找到压缩包: XG-040G-MD.tar.gz"
-            tar -xzvf "$GITHUB_WORKSPACE/XG-040G-MD.tar.gz" -C openwrt/
-            echo "✅ 解压完成"
-            
-            # 验证 DTS 文件
-            DTS_FILE="openwrt/target/linux/airoha/dts/an7581-bell_xg-040g-md.dts"
-            if [ -f "$DTS_FILE" ]; then
-                echo "✅ DTS 文件已更新"
-            else
-                echo "⚠️ 查找实际位置..."
-                find openwrt -name "*.dts" | head -5
-            fi
-        else
-            echo "❌ 错误: 找不到 XG-040G-MD.tar.gz"
-            exit 1
-        fi
-
-    # ---------- 复旦微闪存修复（如需要）----------
-    - name: 复旦微闪存修复检查
+        tar -xzvf XG-040G-MD.tar.gz -C openwrt/
+    - name: Load custom feeds
       run: |
-        DTS_FILE=$(find openwrt -name "an7581-bell_xg-040g-md.dts" 2>/dev/null | head -1)
-        
-        if [ -z "$DTS_FILE" ]; then
-            echo "❌ 找不到 DTS 文件"
-            exit 1
-        fi
-        
-        echo "DTS 文件: $DTS_FILE"
-        
-        if grep -q "disabled" "$DTS_FILE" | grep -q "afe"; then
-            echo "✅ AFE 已禁用"
-        else
-            echo "⚠️ 添加 AFE 禁用..."
-            cat >> "$DTS_FILE" << 'EOF'
-
-&afe {
-    status = "disabled";
-};
-EOF
-            echo "✅ 已添加"
-        fi
-
-    # ---------- 加载自定义 feeds ----------
-    - name: 加载自定义 feeds
-      run: |
-        [ -e feeds.conf.default ] && cp feeds.conf.default openwrt/feeds.conf.default
         chmod +x $DIY_P1_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
-
-    - name: 更新 feeds
+    - name: Update feeds
       run: cd openwrt && ./scripts/feeds update -a
-
-    - name: 安装 feeds
+    - name: Install feeds
       run: cd openwrt && ./scripts/feeds install -a
-
-    # ---------- 加载固件配置 ----------
-    - name: 加载自定义配置
+    - name: Load custom configuration
       run: |
-        [ -e files ] && cp -r files openwrt/files
         [ -e $CONFIG_FILE ] && cp $CONFIG_FILE openwrt/.config
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
-
-    # ---------- SSH 调试 ----------
-    - name: SSH 连接 Actions
+    - name: SSH connection to Actions
       uses: P3TERX/ssh2actions@v1.0.0
-      if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh != 'false') || contains(github.event.action, 'ssh')
-      env:
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-
-    # ---------- 下载软件包 ----------
-    - name: 下载软件包
+      if: (github.event.inputs.ssh == 'true')
+    - name: Download package
       run: |
         cd openwrt
         make defconfig
         make download -j8
-        find dl -size -1024c -exec ls -l {} \;
-        find dl -size -1024c -exec rm -f {} \;
-
-    # ---------- 编译固件 ----------
-    - name: 编译固件
+    - name: Compile firmware
       id: compile
       run: |
         cd openwrt
-        echo -e "$(nproc) 线程编译"
-        make -j$(nproc) || make -j1 || make -j1 V=s
+        make -j$(nproc) || make -j1
         echo "status=success" >> $GITHUB_OUTPUT
         echo "FILE_DATE=$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
-
-    # ---------- 整理固件 ----------
-    - name: 整理固件文件
+    - name: Organize files
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
       run: |
         cd openwrt/bin/targets/airoha/an7581
         rm -rf packages
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
-        echo "status=success" >> $GITHUB_OUTPUT
-
-    - name: 上传固件目录（Artifact）
+    - name: Upload firmware
       uses: actions/upload-artifact@main
-      if: steps.organize.outputs.status == 'success' && !cancelled()
+      if: steps.compile.outputs.status == 'success'
       with:
-        name: XG-040G-MD_FudanMicro_${{ env.FILE_DATE }}
+        name: XG-040G-MD_${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
-
-    # ---------- 创建 Release ----------
-    - name: 生成 Release Tag
-      id: tag
-      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
-      run: |
-        echo "release_tag=XG-040G-MD-复旦微-$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
-        cat > release.txt << 'EOF'
-## XG-040G-MD 固件说明（复旦微闪存版）
-
-### ⚠️ 特别注意
-- 本固件专为**复旦微 FM25G02BI3 闪存**适配
-- 使用仓库中的自定义 DTS 文件编译
-
-### 固件特性
-- 源码分支: openwrt-25.12
-- 内核版本: 6.12.74
-- NPU 驱动: 已启用
-- 超频支持: 需通过 SoC 插件设置
-- IPv6: 完全支持
-- USB 网络共享: 已支持
-EOF
-        echo "status=success" >> $GITHUB_OUTPUT
-
-    - name: 上传固件到 Release
-      uses: softprops/action-gh-release@v1
-      if: steps.tag.outputs.status == 'success' && !cancelled()
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ steps.tag.outputs.release_tag }}
-        body_path: release.txt
-        files: ${{ env.FIRMWARE }}/*
-
-    # ---------- 清理旧 Releases ----------
-    - name: 删除旧 Releases
-      uses: dev-drprasad/delete-older-releases@v0.2.1
-      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
-      with:
-        keep_latest: 5
-        delete_tags: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
