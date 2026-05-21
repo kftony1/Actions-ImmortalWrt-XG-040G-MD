@@ -8,7 +8,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 
-name: Build immortalwrt
+name: Build OpenWrt
 
 on:
   repository_dispatch:
@@ -87,82 +87,36 @@ jobs:
       run: |
         df -hT $PWD
         git clone $REPO_URL -b $REPO_BRANCH openwrt
-        # 解压设备补丁包（如果存在）
-        if [ -f $GITHUB_WORKSPACE/XG-040G-MD.tar.gz ]; then
-          echo "Extracting device patch..."
-          tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz -C /workdir/openwrt
-        else
-          echo "Warning: XG-040G-MD.tar.gz not found, skipping"
-        fi
+        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+        tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz -C /workdir/openwrt
 
     - name: Enable build ccache
       uses: klever1988/cachewrtbuild@main
       with:
         ccache: 'true'
         mixkey: 'immortalwrt-xg040gmd-612'
-        prefix: /workdir/openwrt
+        prefix: ${{ github.workspace }}/openwrt
 
     - name: Load custom feeds
       run: |
-        cd /workdir/openwrt
-        if [ -f $GITHUB_WORKSPACE/$FEEDS_CONF ]; then
-          cp $GITHUB_WORKSPACE/$FEEDS_CONF feeds.conf.default
-        fi
-        if [ -f $GITHUB_WORKSPACE/$DIY_P1_SH ]; then
-          chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
-          $GITHUB_WORKSPACE/$DIY_P1_SH
-        else
-          echo "Warning: $DIY_P1_SH not found, skipping"
-        fi
+        [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
+        chmod +x $DIY_P1_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P1_SH
    
     - name: Update feeds
-      run: cd /workdir/openwrt && ./scripts/feeds update -a
+      run: cd openwrt && ./scripts/feeds update -a
 
     - name: Install feeds
-      run: cd /workdir/openwrt && ./scripts/feeds install -a
+      run: cd openwrt && ./scripts/feeds install -a
 
-    # ============================================
-    # 关键修复：配置加载 + defconfig 立即执行
-    # ============================================
     - name: Load custom configuration
       run: |
-        cd /workdir/openwrt
-        
-        # 1. 复制内核配置文件
-        if [ -f $GITHUB_WORKSPACE/$CONFIG_FILE ]; then
-          cp $GITHUB_WORKSPACE/$CONFIG_FILE .config
-          echo "✓ Config file copied successfully"
-        else
-          echo "⚠ Warning: $CONFIG_FILE not found, using default config"
-        fi
-        
-        # 2. 执行编译后自定义脚本（添加额外配置）
-        if [ -f $GITHUB_WORKSPACE/$DIY_P2_SH ]; then
-          chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
-          $GITHUB_WORKSPACE/$DIY_P2_SH
-          echo "✓ DIY_P2_SH executed"
-        else
-          echo "⚠ Warning: $DIY_P2_SH not found, skipping"
-        fi
-        
-        # 3. 🔥 关键修复：立即运行 defconfig 固化配置
-        make defconfig
-        echo "✓ defconfig completed - configuration frozen"
-        
-        # 4. 保存最终配置用于调试
-        cp .config defconfig-final.config
-        echo "✓ Final config saved to defconfig-final.config"
-        
-        # 5. 验证关键驱动是否启用
-        echo ""
-        echo "=== 关键驱动验证 ==="
-        for driver in kmod-airoha-eth kmod-airoha-switch kmod-airoha-npu; do
-          if grep -q "CONFIG_PACKAGE_$driver=y" .config; then
-            echo "  ✅ $driver"
-          else
-            echo "  ❌ $driver (MISSING!)"
-          fi
-        done
+        [ -e files ] && mv files openwrt/files
+        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
+        chmod +x $DIY_P2_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P2_SH
 
     - name: SSH connection to Actions
       uses: P3TERX/ssh2actions@v1.0.0
@@ -171,44 +125,25 @@ jobs:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
-    # ============================================
-    # 注意：这里不再执行 make defconfig
-    # ============================================
     - name: Download package
       id: package
       run: |
-        cd /workdir/openwrt
-        # make defconfig  # 🔥 已删除！在上一步已经执行过了
+        cd openwrt
+        make defconfig
         make download -j8
-        # 删除下载失败的小文件（小于1KB）
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
 
     - name: Compile the firmware
       id: compile
       run: |
-        cd /workdir/openwrt
+        cd openwrt
         echo -e "$(nproc) thread compile"
-        if make -j$(nproc); then
-          echo "status=success" >> $GITHUB_OUTPUT
-        elif make -j1; then
-          echo "status=success" >> $GITHUB_OUTPUT
-        else
-          make -j1 V=s
-          echo "status=failed" >> $GITHUB_OUTPUT
-          exit 1
-        fi
-        # 提取设备名称
+        make -j$(nproc) || make -j1 || make -j1 V=s
+        echo "status=success" >> $GITHUB_OUTPUT
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
-        if [ -s DEVICE_NAME ]; then
-          DEVICE_NAME=$(cat DEVICE_NAME)
-          echo "DEVICE_NAME=_$DEVICE_NAME" >> $GITHUB_ENV
-          echo "✓ Device: $DEVICE_NAME"
-        else
-          echo "⚠ Warning: No device name found in config"
-          echo "DEVICE_NAME=" >> $GITHUB_ENV
-        fi
-        echo "FILE_DATE=_$(date +"%Y%m%d%H%M%S")" >> $GITHUB_ENV
+        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
+        echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
         
     - name: Check space usage
       if: (!cancelled())
@@ -219,39 +154,35 @@ jobs:
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
         name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
-        path: /workdir/openwrt/bin
+        path: openwrt/bin
 
     - name: Organize files
       id: organize
-      if: env.UPLOAD_FIRMWARE == 'true' && steps.compile.outputs.status == 'success'
+      if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
       run: |
-        cd /workdir/openwrt/bin/targets/*/*
+        cd openwrt/bin/targets/*/*
         rm -rf packages
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
-        echo "✓ Firmware directory: $PWD"
 
     - name: Upload firmware directory
       uses: actions/upload-artifact@main
-      if: steps.organize.outputs.status == 'success'
+      if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
         name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
 
     - name: Generate release tag
       id: tag
-      if: env.UPLOAD_RELEASE == 'true' && steps.compile.outputs.status == 'success'
+      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
-        RELEASE_TAG="XG-040G-MD-$(date +"%Y.%m.%d-%H%M%S")"
-        echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
-        echo "Release tag: $RELEASE_TAG" > release.txt
-        echo "Build date: $(date)" >> release.txt
-        echo "Device: XG-040G-MD" >> release.txt
+        echo "release_tag=XG-040G-MD-$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
+        touch release.txt
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware to release
       uses: softprops/action-gh-release@v1
-      if: steps.tag.outputs.status == 'success'
+      if: steps.tag.outputs.status == 'success' && !cancelled()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
@@ -272,4 +203,4 @@ jobs:
         keep_latest: 5
         delete_tags: true
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${#}
