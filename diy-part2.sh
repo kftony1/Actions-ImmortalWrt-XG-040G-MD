@@ -1,3 +1,4 @@
+cd /mnt/d/Users/Admin/Desktop/OpenWrt/XG-040G-MD && cat > diy-part2.sh << 'EOF'
 #!/bin/bash
 #
 # diy-part2.sh - XG-040G-MD 配置修改
@@ -60,21 +61,10 @@ do
     fi
 done
 
-# 4. 添加 USB 网络支持
-echo ""
-echo "=== 4. 添加 USB 网络支持 ==="
-for usb_config in \
-    "CONFIG_PACKAGE_kmod-usb-net=y" \
-    "CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y" \
-    "CONFIG_PACKAGE_kmod-usb-net-rndis=y"
-do
-    if ! grep -q "^$usb_config$" .config 2>/dev/null; then
-        echo "$usb_config" >> .config
-        echo "✅ 已添加: $usb_config"
-    fi
-done
-
 echo ""
 echo "=========================================="
 echo "✅ diy-part2.sh 执行完成"
 echo "=========================================="
+EOF
+
+chmod +x diy-part2.sh && echo "✅ diy-part2.sh 已更新（已移除 USB 网络支持）"
