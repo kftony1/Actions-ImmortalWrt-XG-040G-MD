@@ -87,7 +87,10 @@ jobs:
         df -hT $PWD
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+        echo "解压自定义 DTS 和 files 文件..."
         tar zxvf $GITHUB_WORKSPACE/XG-040G-MD.tar.gz -C /workdir/openwrt
+        echo "验证 DTS 文件..."
+        find /workdir/openwrt/target/linux/airoha -name "*.dts" 2>/dev/null | head -5 || echo "未找到 DTS"
 
     - name: Enable build ccache
       uses: klever1988/cachewrtbuild@main
@@ -114,8 +117,10 @@ jobs:
         if [ -e "$GITHUB_WORKSPACE/openwrt.config" ]; then
           cp "$GITHUB_WORKSPACE/openwrt.config" openwrt/.config
           echo "✅ 配置文件已复制"
+          echo "配置文件中的目标设备："
+          grep "CONFIG_TARGET.*bell_xg-040g-md" openwrt/.config || echo "⚠️ 未找到目标设备配置"
         else
-          echo "❌ 配置文件不存在"
+          echo "❌ 配置文件不存在: $GITHUB_WORKSPACE/openwrt.config"
           exit 1
         fi
         chmod +x $DIY_P2_SH
@@ -147,6 +152,8 @@ jobs:
         
         # 移除所有其他设备选择
         sed -i '/^CONFIG_TARGET_.*DEVICE_.*=y/d' .config
+        sed -i '/^CONFIG_TARGET_airoha=/d' .config
+        sed -i '/^CONFIG_TARGET_airoha_an7581=/d' .config
         
         # 添加正确的设备配置
         cat >> .config << 'EOF'
@@ -170,10 +177,13 @@ jobs:
           echo "✅ 设备配置成功: XG-040G-MD"
           echo "最终编译设备："
           grep "CONFIG_TARGET.*bell_xg-040g-md" .config
+          echo ""
+          echo "目标平台配置："
+          grep "CONFIG_TARGET_airoha" .config | grep -v "^#" || echo "平台配置正常"
         else
           echo "❌ 设备配置失败"
-          echo "当前配置："
-          grep "CONFIG_TARGET.*DEVICE" .config
+          echo "当前配置中的所有设备："
+          grep "CONFIG_TARGET.*DEVICE" .config || echo "未找到任何设备配置"
           exit 1
         fi
         
@@ -193,6 +203,19 @@ jobs:
       id: compile
       run: |
         cd openwrt
+        
+        # 编译前最终验证
+        echo "=========================================="
+        echo "编译前最终验证..."
+        echo "=========================================="
+        if ! grep -q "bell_xg-040g-md" .config; then
+          echo "❌ 错误：设备配置在编译前丢失！"
+          echo "当前配置："
+          grep "CONFIG_TARGET.*DEVICE" .config
+          exit 1
+        fi
+        echo "✅ 设备验证通过: XG-040G-MD"
+        
         echo "=========================================="
         echo "开始编译固件..."
         echo "使用 $(nproc) 线程编译"
