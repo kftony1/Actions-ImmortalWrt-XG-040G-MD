@@ -1,4 +1,3 @@
-#
 # Copyright (c) 2019-2020 P3TERX <https://p3terx.com>
 #
 # This is free software, licensed under the MIT License.
@@ -112,12 +111,16 @@ jobs:
 
     - name: Load custom configuration
       run: |
-       # [ -e files ] && mv files openwrt/files
-       CONFIG_FILE="openwrt.config"
-       [ -e "$CONFIG_FILE" ] && cp "$CONFIG_FILE" openwrt/.config
-       chmod +x $DIY_P2_SH
-       cd openwrt
-       $GITHUB_WORKSPACE/$DIY_P2_SH
+        if [ -e "$GITHUB_WORKSPACE/openwrt.config" ]; then
+          cp "$GITHUB_WORKSPACE/openwrt.config" openwrt/.config
+          echo "✅ 配置文件已复制"
+        else
+          echo "❌ 配置文件不存在"
+          exit 1
+        fi
+        chmod +x $DIY_P2_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P2_SH
 
     - name: SSH connection to Actions
       uses: P3TERX/ssh2actions@v1.0.0
@@ -130,7 +133,32 @@ jobs:
       id: package
       run: |
         cd openwrt
+        
+        # 运行 defconfig 处理包依赖
         make defconfig
+        
+        # 使用 scripts/config 强制设置 XG-040G-MD 设备
+        ./scripts/config \
+          --enable CONFIG_TARGET_airoha \
+          --enable CONFIG_TARGET_airoha_an7581 \
+          --enable CONFIG_TARGET_airoha_an7581_DEVICE_bell_xg-040g-md
+        
+        # 自动更新配置（无交互）
+        make oldconfig </dev/null
+        
+        # 验证设备配置是否正确
+        if grep -q "bell_xg-040g-md" .config; then
+          echo "✅ 设备配置成功: XG-040G-MD"
+          echo "最终编译设备："
+          grep "CONFIG_TARGET.*bell_xg-040g-md" .config
+        else
+          echo "❌ 设备配置失败"
+          echo "当前配置："
+          grep "CONFIG_TARGET.*DEVICE" .config
+          exit 1
+        fi
+        
+        # 下载依赖包
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
