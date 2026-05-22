@@ -14,7 +14,7 @@ on:
         type: boolean
 
 env:
-  CONFIG_FILE: "config/immortalwrt.config"
+  CONFIG_FILE: "immortalwrt.config"          # 修改为仓库根目录
   REPO_URL: https://github.com/immortalwrt/immortalwrt.git
   REPO_BRANCH: openwrt-25.12
   UPLOAD_FIRMWARE: true
@@ -92,6 +92,19 @@ jobs:
         run: |
           ./scripts/feeds update -a
           ./scripts/feeds install -a
+
+      # 新增：应用复旦微闪存补丁
+      - name: Apply FM25G02B kernel patch
+        working-directory: ./openwrt
+        run: |
+          PATCH_DIR="target/linux/generic/hack-6.12"
+          mkdir -p "$PATCH_DIR"
+          if [ -f "../patches/0001-mtd-spinand-Add-FudanMicro-FM25G02B-support.patch" ]; then
+            cp "../patches/0001-mtd-spinand-Add-FudanMicro-FM25G02B-support.patch" "$PATCH_DIR/"
+            echo "✅ FM25G02B patch added to $PATCH_DIR"
+          else
+            echo "⚠️ Patch file not found, skipping (ensure patches/ directory exists)"
+          fi
 
       - name: Apply configuration
         run: |
