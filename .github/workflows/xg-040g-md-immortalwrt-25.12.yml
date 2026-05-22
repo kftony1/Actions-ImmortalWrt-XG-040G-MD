@@ -102,15 +102,15 @@ jobs:
             ls -la *.tar.gz 2>/dev/null || echo "No tar.gz files found"
           fi
 
-      - name: Run DIR-PART1.sh script
+      - name: Run diy-part1.sh script
         run: |
-          if [ -f "DIR-PART1.sh" ]; then
-            echo "🚀 Running DIR-PART1.sh script..."
-            chmod +x DIR-PART1.sh
-            bash DIR-PART1.sh
-            echo "✅ DIR-PART1.sh executed successfully"
+          if [ -f "diy-part1.sh" ]; then
+            echo "🚀 Running diy-part1.sh script..."
+            chmod +x diy-part1.sh
+            bash diy-part1.sh
+            echo "✅ diy-part1.sh executed successfully"
           else
-            echo "⚠️ DIR-PART1.sh not found, skipping"
+            echo "⚠️ diy-part1.sh not found, skipping"
           fi
 
       - name: Move build dirs to /mnt/openwrt
@@ -188,15 +188,15 @@ jobs:
           make download -j4 V=s
           find dl -size -1024c -delete
 
-      - name: Run DIR-PART2.sh script
+      - name: Run diy-part2.sh script
         run: |
-          if [ -f "DIR-PART2.sh" ]; then
-            echo "🚀 Running DIR-PART2.sh script..."
-            chmod +x DIR-PART2.sh
-            bash DIR-PART2.sh
-            echo "✅ DIR-PART2.sh executed successfully"
+          if [ -f "diy-part2.sh" ]; then
+            echo "🚀 Running diy-part2.sh script..."
+            chmod +x diy-part2.sh
+            bash diy-part2.sh
+            echo "✅ diy-part2.sh executed successfully"
           else
-            echo "⚠️ DIR-PART2.sh not found, skipping"
+            echo "⚠️ diy-part2.sh not found, skipping"
           fi
 
       - name: Compile OpenWrt firmware
