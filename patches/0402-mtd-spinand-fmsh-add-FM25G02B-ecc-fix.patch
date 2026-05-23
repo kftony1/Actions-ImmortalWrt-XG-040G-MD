@@ -2,6 +2,8 @@ From: Your Name <your@email.com>
 Date: Sun, 24 May 2026 15:00:00 +0800
 Subject: [PATCH] mtd: spinand: fmsh: add FM25G02B ECC status handler
 
+Add ecc_get_status for FM25G02B to fix stability issues.
+
 Signed-off-by: Your Name <your@email.com>
 ---
  drivers/mtd/nand/spi/fmsh.c | 25 +++++++++++++++++++++++++
@@ -29,8 +31,9 @@ index 76f4dbb..9f2d3e8 100644
 +	}
 +}
 +
-+/* Replace the NULL ecc_get_status with our function */
-+/* The following hunk modifies the table entry */
+ static const struct spinand_info fmsh_spinand_table[] = {
+ 	SPINAND_INFO("FM25S01A",
+ 		     SPINAND_ID(SPINAND_READID_METHOD_OPCODE_DUMMY, 0xA1),
 @@ -132,7 +150,7 @@ static const struct spinand_info fmsh_spinand_table[] = {
  					      &write_cache_variants,
  					      &update_cache_variants),
