@@ -144,8 +144,8 @@ jobs:
         run: |
           PATCH_DIR="target/linux/generic/hack-6.12"
           mkdir -p "$PATCH_DIR"
-          if [ -f "../patches/0400-mtd-spinand-fmsh-add-FM25G02B-support.patch" ]; then
-            cp "../patches/0400-mtd-spinand-fmsh-add-FM25G02B-support.patch" "$PATCH_DIR/"
+          if [ -f "../patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch" ]; then
+            cp "../patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch" "$PATCH_DIR/"
             echo "✅ FM25G02B patch added"
           else
             echo "⚠️ Patch not found (patches/0400-mtd-spinand-fmsh-add-FM25G02B-support.patch)"
