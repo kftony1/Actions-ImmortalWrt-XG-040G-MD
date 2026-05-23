@@ -1,4 +1,4 @@
-CONFIG_FILE: "config/xg-040g-md.config改成仓库根目录下openwrt.config。name: Build_XG_040G_MD_OpenWrt_25_12
+name: Build_XG_040G_MD_OpenWrt_25_12
 
 permissions:
   contents: write
@@ -137,6 +137,19 @@ jobs:
         run: |
           ./scripts/feeds update -a
           ./scripts/feeds install -a -f
+
+      # 新增：应用复旦微闪存补丁（单个补丁，编号0400）
+      - name: Apply FM25G02B support patch
+        working-directory: ./openwrt
+        run: |
+          PATCH_DIR="target/linux/generic/hack-6.12"
+          mkdir -p "$PATCH_DIR"
+          if [ -f "../patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch" ]; then
+            cp "../patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch" "$PATCH_DIR/"
+            echo "✅ FM25G02B patch added"
+          else
+            echo "⚠️ Patch not found (patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch)"
+          fi
 
       - name: Install third-party packages (homeproxy, passwall)
         working-directory: ./openwrt/package
