@@ -96,47 +96,16 @@ jobs:
           find target/linux -name "fmsh.c" -delete
           rm -f target/linux/generic/hack-6.12/*fmsh*.patch
 
-      - name: Apply base FMSH driver (0401)
+      - name: Apply full FMSH driver with ECC fix
         working-directory: ./openwrt
         run: |
           PATCH_DIR="target/linux/generic/hack-6.12"
           mkdir -p "$PATCH_DIR"
-          if [ -f "../patches/0401-mtd-spinand-Add-FudanMicro-FM25G02B-base.patch" ]; then
-            cp "../patches/0401-mtd-spinand-Add-FudanMicro-FM25G02B-base.patch" "$PATCH_DIR/"
-            echo "✅ Base FMSH driver patch added"
+          if [ -f "../patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch" ]; then
+            cp "../patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch" "$PATCH_DIR/"
+            echo "✅ Full FMSH driver patch added"
           else
-            echo "❌ Base patch not found"
-            exit 1
-          fi
-
-      - name: Manually add ECC fix for FM25G02B
-        working-directory: ./openwrt
-        run: |
-          FMSH_C="target/linux/generic/hack-6.12/fmsh.c"
-          if [ -f "$FMSH_C" ]; then
-            if ! grep -q "fm25g02b_ecc_get_status" "$FMSH_C"; then
-              sed -i '/static const struct mtd_ooblayout_ops fm25g02b_ooblayout = {/,/^}/a\
-\
-/* FM25G02B ECC status decoder */\
-static int fm25g02b_ecc_get_status(struct spinand_device *spinand, u8 status)\
-{\
-    struct nand_device *nand = spinand_to_nand(spinand);\
-    u8 eccsr = (status >> 4) & 0x7;\
-    switch (eccsr) {\
-    case 0x0: return 0;\
-    case 0x1: case 0x2: case 0x3: return 0;\
-    case 0x4: return nand->eccreq.strength;\
-    case 0x7: return -EBADMSG;\
-    default: return -EBADMSG;\
-    }\
-}' "$FMSH_C"
-              sed -i 's/SPINAND_ECCINFO(&fm25g02b_ooblayout, NULL)/SPINAND_ECCINFO(&fm25g02b_ooblayout, fm25g02b_ecc_get_status)/' "$FMSH_C"
-              echo "✅ Manually added ECC fix for FM25G02B"
-            else
-              echo "ECC fix already present"
-            fi
-          else
-            echo "fmsh.c not found, cannot add ECC fix"
+            echo "❌ Patch not found"
             exit 1
           fi
 
