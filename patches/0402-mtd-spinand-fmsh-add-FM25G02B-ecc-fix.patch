@@ -1,0 +1,90 @@
+From: Your Name <your@email.com>
+Date: Sun, 24 May 2026 15:00:00 +0800
+Subject: [PATCH] mtd: spinand: fmsh: add FM25G02B ECC status handler
+
+Add ecc_get_status for FM25G02B to fix stability issues.
+
+Signed-off-by: Your Name <your@email.com>
+---
+ drivers/mtd/nand/spi/fmsh.c | 37 ++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 36 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/mtd/nand/spi/fmsh.c b/drivers/mtd/nand/spi/fmsh.c
+index 76f4dbb..abcdefg 100644
+--- a/drivers/mtd/nand/spi/fmsh.c
++++ b/drivers/mtd/nand/spi/fmsh.c
+@@ -86,6 +86,42 @@ static const struct mtd_ooblayout_ops fm25g02b_ooblayout = {
+ 	.free = fm25g02b_ooblayout_free,
+ };
+ 
++/* FM25G02B ECC status decoder */
++static int fm25g02b_ecc_get_status(struct spinand_device *spinand, u8 status)
++{
++	struct nand_device *nand = spinand_to_nand(spinand);
++	u8 eccsr = (status >> 4) & 0x7;
++	switch (eccsr) {
++	case 0x0: return 0;
++	case 0x1: case 0x2: case 0x3: return 0;
++	case 0x4: return nand->eccreq.strength;
++	case 0x7: return -EBADMSG;
++	default: return -EBADMSG;
++	}
++}
++
++/* Modify the FM25G02B entry in the spinand_info table to use the new function */
++static const struct spinand_info fmsh_spinand_table[] = {
++	/* ... existing entries ... */
++	SPINAND_INFO("FM25G02B",
++		     SPINAND_ID(SPINAND_READID_METHOD_OPCODE_DUMMY, 0xD2),
++		     NAND_MEMORG(1, 2048, 128, 64, 2048, 40, 1, 1, 1),
++		     NAND_ECCREQ(8, 528),
++		     SPINAND_INFO_OP_VARIANTS(&read_cache_variants,
++					      &write_cache_variants,
++					      &update_cache_variants),
++		     SPINAND_HAS_QE_BIT,
++		     SPINAND_ECCINFO(&fm25g02b_ooblayout, fm25g02b_ecc_get_status)),
++	/* ... rest of table ... */
++};
++```
+
+**注意**：上面的补丁中 `static const struct spinand_info fmsh_spinand_table[] = {` 可能会重复定义，实际应使用 `sed` 或精确的行号替换。为了简化，建议直接使用下面更可靠的补丁（只修改特定行）：
+
+**更精确的版本**（直接替换 `NULL` 为函数名）：
+
+```patch
+--- a/drivers/mtd/nand/spi/fmsh.c
++++ b/drivers/mtd/nand/spi/fmsh.c
+@@ -86,6 +86,24 @@ static const struct mtd_ooblayout_ops fm25g02b_ooblayout = {
+ 	.free = fm25g02b_ooblayout_free,
+ };
+ 
++/* FM25G02B ECC status decoder */
++static int fm25g02b_ecc_get_status(struct spinand_device *spinand, u8 status)
++{
++	struct nand_device *nand = spinand_to_nand(spinand);
++	u8 eccsr = (status >> 4) & 0x7;
++	switch (eccsr) {
++	case 0x0: return 0;
++	case 0x1: case 0x2: case 0x3: return 0;
++	case 0x4: return nand->eccreq.strength;
++	case 0x7: return -EBADMSG;
++	default: return -EBADMSG;
++	}
++}
++
++/* Replace the NULL ecc_get_status with our function */
++-#include <linux/compiler.h>  /* dummy */
++ /* The following line is part of the table; we need to modify it */
++
+ static const struct spinand_info fmsh_spinand_table[] = {
+ 	SPINAND_INFO("FM25S01A",
+ 		     SPINAND_ID(SPINAND_READID_METHOD_OPCODE_DUMMY, 0xA1),
+@@ -132,7 +150,7 @@ static const struct spinand_info fmsh_spinand_table[] = {
+ 					      &write_cache_variants,
+ 					      &update_cache_variants),
+ 		     SPINAND_HAS_QE_BIT,
+-		     SPINAND_ECCINFO(&fm25g02b_ooblayout, NULL)),
++		     SPINAND_ECCINFO(&fm25g02b_ooblayout, fm25g02b_ecc_get_status)),
+ 	SPINAND_INFO("FM25S02A",
+ 		     SPINAND_ID(SPINAND_READID_METHOD_OPCODE_DUMMY, 0xE5),
+ 		     NAND_MEMORG(1, 2048, 64, 64, 2048, 40, 2, 1, 1),
