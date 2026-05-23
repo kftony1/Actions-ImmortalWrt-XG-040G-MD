@@ -148,7 +148,7 @@ jobs:
             cp "../patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch" "$PATCH_DIR/"
             echo "✅ FM25G02B patch added"
           else
-            echo "⚠️ Patch not found (patches/0400-mtd-spinand-fmsh-add-FM25G02B-support.patch)"
+            echo "⚠️ Patch not found (patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch)"
           fi
 
       # 注释：安装第三方软件包（homeproxy, passwall）
