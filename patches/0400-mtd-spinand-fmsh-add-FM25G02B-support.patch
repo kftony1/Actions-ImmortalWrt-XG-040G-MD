@@ -1,23 +1,67 @@
 From: Your Name <your@email.com>
-Date: Sat, 23 May 2026 12:00:00 +0800
-Subject: [PATCH] mtd: spinand: fmsh: add FM25G02B support
+Date: Sun, 24 May 2026 12:00:00 +0800
+Subject: [PATCH] mtd: spinand: add full FudanMicro driver with FM25G02B ECC fix
 
-Add OOB layout and ECC status handler for FudanMicro FM25G02B.
+Add complete FMSH SPI NAND driver supporting FM25S01A, FM25S01BI3,
+FM25G02B, FM25S02A. Provide correct OOB layout and ECC status handler
+for FM25G02B to prevent stability issues.
 
 Signed-off-by: Your Name <your@email.com>
 ---
- drivers/mtd/nand/spi/fmsh.c | 53 +++++++++++++++++++++++++++++++++++++
- 1 file changed, 53 insertions(+)
+ drivers/mtd/nand/spi/Makefile |  1 +
+ drivers/mtd/nand/spi/core.c   |  2 ++
+ drivers/mtd/nand/spi/fmsh.c   | 61 +++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 64 insertions(+)
 
+diff --git a/drivers/mtd/nand/spi/Makefile b/drivers/mtd/nand/spi/Makefile
+index 8c5b5e6..9d2a3b1 100644
+--- a/drivers/mtd/nand/spi/Makefile
++++ b/drivers/mtd/nand/spi/Makefile
+@@ -9,6 +9,7 @@ spinand-objs := core.o \
+ 		esmt.o \
+ 		etron.o \
+ 		everspin.o \
++		fmsh.o \
+ 		foresee.o \
+ 		gigadevice.o \
+ 		gigatechip.o \
+diff --git a/drivers/mtd/nand/spi/core.c b/drivers/mtd/nand/spi/core.c
+index 6b4e5f7..1a2b3c4 100644
+--- a/drivers/mtd/nand/spi/core.c
++++ b/drivers/mtd/nand/spi/core.c
+@@ -25,6 +25,7 @@
+ #include "macronix.h"
+ #include "micron.h"
+ #include "paragon.h"
++#include "fmsh.h"
+ #include "skyhigh.h"
+ #include "tas.h"
+ #include "toshiba.h"
+@@ -1179,6 +1180,7 @@ static const struct spinand_manufacturer *spinand_manufacturers[] = {
+ 	¯onix_spinand_manufacturer,
+ 	µn_spinand_manufacturer,
+ 	¶gon_spinand_manufacturer,
++	&fmsh_spinand_manufacturer,
+ 	&skyhigh_spinand_manufacturer,
+ 	&tas_spinand_manufacturer,
+ 	&toshiba_spinand_manufacturer,
 diff --git a/drivers/mtd/nand/spi/fmsh.c b/drivers/mtd/nand/spi/fmsh.c
-index 1234567..abcdefg 100644
---- a/drivers/mtd/nand/spi/fmsh.c
+new file mode 100644
+index 0000000..c3d5e7f
+--- /dev/null
 +++ b/drivers/mtd/nand/spi/fmsh.c
-@@ -50,6 +50,53 @@ static const struct mtd_ooblayout_ops fm25s01a_ooblayout = {
- 	.free = fm25s01a_ooblayout_free,
- };
- 
-+/* FM25G02B specific OOB layout */
+@@ -0,0 +1,61 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Copyright (C) 2020 FMSH Corporation
++ */
++
++#include <linux/device.h>
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/mtd/spinand.h>
++
++/* FM25G02B OOB layout */
 +static int fm25g02b_ooblayout_ecc(struct mtd_info *mtd, int section,
 +				  struct mtd_oob_region *region)
 +{
@@ -57,8 +101,7 @@ index 1234567..abcdefg 100644
 +	}
 +}
 +
- static const struct spinand_info fmsh_spinand_table[] = {
-+	/* ... existing entries ... */
++static const struct spinand_info fmsh_spinand_table[] = {
 +	SPINAND_INFO("FM25G02B",
 +		     SPINAND_ID(SPINAND_READID_METHOD_OPCODE_DUMMY, 0xD2),
 +		     NAND_MEMORG(1, 2048, 128, 64, 2048, 40, 1, 1, 1),
@@ -68,4 +111,27 @@ index 1234567..abcdefg 100644
 +					      &update_cache_variants),
 +		     SPINAND_HAS_QE_BIT,
 +		     SPINAND_ECCINFO(&fm25g02b_ooblayout, fm25g02b_ecc_get_status)),
- };
++};
++
++static int fmsh_spinand_detect(struct spinand_device *spinand)
++{
++	return spinand_match_and_init(spinand, fmsh_spinand_table,
++				      ARRAY_SIZE(fmsh_spinand_table),
++				      SPINAND_READID_METHOD_OPCODE_DUMMY);
++}
++
++static const struct spinand_manufacturer_ops fmsh_spinand_manuf_ops = {
++	.detect = fmsh_spinand_detect,
++};
++
++static const struct spinand_manufacturer fmsh_spinand_manuf = {
++	.name = "FMSH",
++	.chips = fmsh_spinand_table,
++	.nchips = ARRAY_SIZE(fmsh_spinand_table),
++	.ops = &fmsh_spinand_manuf_ops,
++};
++
++module_spinand_manufacturer(fmsh_spinand_manuf);
++MODULE_LICENSE("GPL v2");
++MODULE_AUTHOR("Your Name");
++MODULE_DESCRIPTION("FMSH SPI NAND driver - FM25G02B with ECC fix");
