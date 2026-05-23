@@ -115,23 +115,21 @@ jobs:
           FMSH_C="target/linux/generic/hack-6.12/fmsh.c"
           if [ -f "$FMSH_C" ]; then
             if ! grep -q "fm25g02b_ecc_get_status" "$FMSH_C"; then
-              # 添加 ecc_get_status 函数
               sed -i '/static const struct mtd_ooblayout_ops fm25g02b_ooblayout = {/,/^}/a\
 \
 /* FM25G02B ECC status decoder */\
 static int fm25g02b_ecc_get_status(struct spinand_device *spinand, u8 status)\
 {\
-	struct nand_device *nand = spinand_to_nand(spinand);\
-	u8 eccsr = (status >> 4) & 0x7;\
-	switch (eccsr) {\
-	case 0x0: return 0;\
-	case 0x1: case 0x2: case 0x3: return 0;\
-	case 0x4: return nand->eccreq.strength;\
-	case 0x7: return -EBADMSG;\
-	default: return -EBADMSG;\
-	}\
+    struct nand_device *nand = spinand_to_nand(spinand);\
+    u8 eccsr = (status >> 4) & 0x7;\
+    switch (eccsr) {\
+    case 0x0: return 0;\
+    case 0x1: case 0x2: case 0x3: return 0;\
+    case 0x4: return nand->eccreq.strength;\
+    case 0x7: return -EBADMSG;\
+    default: return -EBADMSG;\
+    }\
 }' "$FMSH_C"
-              # 修改表项中的 NULL 为函数名
               sed -i 's/SPINAND_ECCINFO(&fm25g02b_ooblayout, NULL)/SPINAND_ECCINFO(&fm25g02b_ooblayout, fm25g02b_ecc_get_status)/' "$FMSH_C"
               echo "✅ Manually added ECC fix for FM25G02B"
             else
