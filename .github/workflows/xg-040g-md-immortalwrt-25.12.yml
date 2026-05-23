@@ -138,19 +138,6 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a -f
 
-      # 新增：应用复旦微闪存补丁
-      - name: Apply FM25G02B kernel patch
-        working-directory: ./openwrt
-        run: |
-          PATCH_DIR="target/linux/generic/hack-6.12"
-          mkdir -p "$PATCH_DIR"
-          if [ -f "../patches/0001-mtd-spinand-Add-FudanMicro-FM25G02B-support.patch" ]; then
-            cp "../patches/0001-mtd-spinand-Add-FudanMicro-FM25G02B-support.patch" "$PATCH_DIR/"
-            echo "✅ FM25G02B patch added to $PATCH_DIR"
-          else
-            echo "⚠️ Patch file not found, skipping (ensure patches/ directory exists)"
-          fi
-
       # 注释：安装第三方软件包（homeproxy, passwall）
       # - name: Install third-party packages (homeproxy, passwall)
       #   working-directory: ./openwrt/package
