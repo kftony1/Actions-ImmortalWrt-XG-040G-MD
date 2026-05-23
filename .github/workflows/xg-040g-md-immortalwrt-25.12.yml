@@ -29,7 +29,7 @@ env:
   UPLOAD_RELEASE: true
   KEEP_RELEASES: 20
   KEEP_RELEASE_MARKER: "[keep-release]"
-  CCACHE_DIR: /mnt/openwrt/ccache
+  CCACHE_DIR: /mnt/immortalwrt/ccache   # 修改路径
   CCACHE_MAXSIZE: 5G
   TZ: Asia/Shanghai
 
@@ -99,20 +99,20 @@ jobs:
             ls -la *.tar.gz 2>/dev/null || echo "No tar.gz files found"
           fi
 
-      - name: Move build dirs to /mnt/openwrt
+      - name: Move build dirs to /mnt/immortalwrt   # 修改步骤名称中的路径
         run: |
-          sudo mkdir -p /mnt/openwrt/{dl,staging_dir,build_dir,ccache}
-          sudo chown -R "$USER:$(id -gn)" /mnt/openwrt
+          sudo mkdir -p /mnt/immortalwrt/{dl,staging_dir,build_dir,ccache}
+          sudo chown -R "$USER:$(id -gn)" /mnt/immortalwrt
           rm -rf openwrt/dl openwrt/staging_dir openwrt/build_dir
-          ln -sfn /mnt/openwrt/dl openwrt/dl
-          ln -sfn /mnt/openwrt/staging_dir openwrt/staging_dir
-          ln -sfn /mnt/openwrt/build_dir openwrt/build_dir
+          ln -sfn /mnt/immortalwrt/dl openwrt/dl
+          ln -sfn /mnt/immortalwrt/staging_dir openwrt/staging_dir
+          ln -sfn /mnt/immortalwrt/build_dir openwrt/build_dir
           df -h
 
       - name: Restore dl cache
         uses: actions/cache@v4
         with:
-          path: /mnt/openwrt/dl
+          path: /mnt/immortalwrt/dl   # 修改路径
           key: ${{ runner.os }}-immortalwrt-${{ env.REPO_BRANCH }}-dl-${{ hashFiles('feeds.conf.default') }}
           restore-keys: |
             ${{ runner.os }}-immortalwrt-${{ env.REPO_BRANCH }}-dl-
@@ -120,7 +120,7 @@ jobs:
       - name: Restore ccache
         uses: actions/cache/restore@v4
         with:
-          path: /mnt/openwrt/ccache
+          path: /mnt/immortalwrt/ccache   # 修改路径
           key: ${{ runner.os }}-immortalwrt-${{ env.REPO_BRANCH }}-ccache-v2-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-immortalwrt-${{ env.REPO_BRANCH }}-ccache-v2-
@@ -219,7 +219,7 @@ jobs:
         uses: actions/cache/save@v4
         if: always()
         with:
-          path: /mnt/openwrt/ccache
+          path: /mnt/immortalwrt/ccache   # 修改路径
           key: ${{ runner.os }}-immortalwrt-${{ env.REPO_BRANCH }}-ccache-v2-${{ github.run_id }}
 
       - name: Prepare firmware artifacts path
