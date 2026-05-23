@@ -1,5 +1,5 @@
 From: Your Name <your@email.com>
-Date: Wed, 20 May 2026 14:30:00 +0800
+Date: Sat, 23 May 2026 12:00:00 +0800
 Subject: [PATCH] mtd: spinand: fmsh: add FM25G02B support
 
 Add OOB layout and ECC status handler for FudanMicro FM25G02B.
@@ -13,10 +13,11 @@ diff --git a/drivers/mtd/nand/spi/fmsh.c b/drivers/mtd/nand/spi/fmsh.c
 index 1234567..abcdefg 100644
 --- a/drivers/mtd/nand/spi/fmsh.c
 +++ b/drivers/mtd/nand/spi/fmsh.c
-@@ -100,6 +100,59 @@ static const struct mtd_ooblayout_ops fm25s01a_ooblayout = {
+@@ -50,6 +50,53 @@ static const struct mtd_ooblayout_ops fm25s01a_ooblayout = {
  	.free = fm25s01a_ooblayout_free,
  };
  
++/* FM25G02B specific OOB layout */
 +static int fm25g02b_ooblayout_ecc(struct mtd_info *mtd, int section,
 +				  struct mtd_oob_region *region)
 +{
@@ -42,6 +43,7 @@ index 1234567..abcdefg 100644
 +	.free = fm25g02b_ooblayout_free,
 +};
 +
++/* FM25G02B ECC status decoder */
 +static int fm25g02b_ecc_get_status(struct spinand_device *spinand, u8 status)
 +{
 +	struct nand_device *nand = spinand_to_nand(spinand);
@@ -55,7 +57,7 @@ index 1234567..abcdefg 100644
 +	}
 +}
 +
-+static const struct spinand_info fmsh_spinand_table[] = {
+ static const struct spinand_info fmsh_spinand_table[] = {
 +	/* ... existing entries ... */
 +	SPINAND_INFO("FM25G02B",
 +		     SPINAND_ID(SPINAND_READID_METHOD_OPCODE_DUMMY, 0xD2),
@@ -66,6 +68,4 @@ index 1234567..abcdefg 100644
 +					      &update_cache_variants),
 +		     SPINAND_HAS_QE_BIT,
 +		     SPINAND_ECCINFO(&fm25g02b_ooblayout, fm25g02b_ecc_get_status)),
-+};
-+
-+/* ... rest of the file ... */
+ };
