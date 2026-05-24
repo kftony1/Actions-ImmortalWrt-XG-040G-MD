@@ -22,7 +22,7 @@ on:
 
 env:
   CONFIG_FILE: "openwrt.config"
-  REPO_URL: https://github.com/openwrt/openwrt.git
+  REPO_URL: https://github.com/xiangtailiang/openwrt.git
   REPO_BRANCH: openwrt-25.12
   FEEDS_CONF: feeds.conf.default
   UPLOAD_FIRMWARE: true
