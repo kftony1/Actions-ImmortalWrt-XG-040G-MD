@@ -113,7 +113,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /mnt/openwrt/dl
-          key: ${{ runner.os }}-openwrt-${{ env.REPO_BRANCH }}-dl-${{ hashFiles('feeds.conf.default') }}
+          key: ${{ runner.os }}-openwrt-${{ env.REPO_BRANCH }}-dl-${{ hashFiles('openwrt/feeds.conf.default') }}
           restore-keys: |
             ${{ runner.os }}-openwrt-${{ env.REPO_BRANCH }}-dl-
 
@@ -121,9 +121,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: /mnt/openwrt/ccache
-          key: ${{ runner.os }}-openwrt-${{ env.REPO_BRANCH }}-ccache-v2-${{ github.run_id }}
+          key: ${{ runner.os }}-openwrt-${{ env.REPO_BRANCH }}-ccache-${{ hashFiles(env.CONFIG_FILE) }}
           restore-keys: |
-            ${{ runner.os }}-openwrt-${{ env.REPO_BRANCH }}-ccache-v2-
+            ${{ runner.os }}-openwrt-${{ env.REPO_BRANCH }}-ccache-
 
       - name: Setup ccache
         run: |
@@ -137,19 +137,6 @@ jobs:
         run: |
           ./scripts/feeds update -a
           ./scripts/feeds install -a -f
-
-      # 新增：应用复旦微闪存补丁（单个补丁，编号0400）
-      - name: Apply FM25G02B support patch
-        working-directory: ./openwrt
-        run: |
-          PATCH_DIR="target/linux/generic/hack-6.12"
-          mkdir -p "$PATCH_DIR"
-          if [ -f "../patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch" ]; then
-            cp "../patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch" "$PATCH_DIR/"
-            echo "✅ FM25G02B patch added"
-          else
-            echo "⚠️ Patch not found (patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch)"
-          fi
 
       - name: Install third-party packages (homeproxy, passwall)
         working-directory: ./openwrt/package
@@ -219,7 +206,7 @@ jobs:
         if: always()
         with:
           path: /mnt/openwrt/ccache
-          key: ${{ runner.os }}-openwrt-${{ env.REPO_BRANCH }}-ccache-v2-${{ github.run_id }}
+          key: ${{ runner.os }}-openwrt-${{ env.REPO_BRANCH }}-ccache-${{ hashFiles(env.CONFIG_FILE) }}
 
       - name: Prepare firmware artifacts path
         id: organize
