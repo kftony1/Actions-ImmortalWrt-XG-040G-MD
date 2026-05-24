@@ -16,7 +16,7 @@ on:
 env:
   CONFIG_FILE: "immortalwrt.config"
   REPO_URL: https://github.com/immortalwrt/immortalwrt.git
-  REPO_BRANCH: openwrt-25.12
+  REPO_BRANCH: openwrt-25.12   
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   CCACHE_DIR: /mnt/immortalwrt/ccache
@@ -68,19 +68,24 @@ jobs:
           ln -sfn /mnt/immortalwrt/staging_dir staging_dir
           ln -sfn /mnt/immortalwrt/build_dir build_dir
 
-      - name: Cache downloads
-        uses: actions/cache@v4
+      # ---------- dl 缓存：恢复 ----------
+      - name: Restore dl cache
+        uses: actions/cache/restore@v4
         with:
           path: /mnt/immortalwrt/dl
-          key: ${{ runner.os }}-dl-${{ hashFiles('immortalwrt/feeds.conf.default') }}
-          restore-keys: ${{ runner.os }}-dl-
+          key: ${{ runner.os }}-immortalwrt-dl-${{ hashFiles('immortalwrt/feeds.conf.default') }}
+          restore-keys: |
+            ${{ runner.os }}-immortalwrt-dl-${{ hashFiles('immortalwrt/feeds.conf.default') }}-
+            ${{ runner.os }}-immortalwrt-dl-
 
-      - name: Cache ccache
-        uses: actions/cache@v4
+      # ---------- ccache 缓存：恢复 ----------
+      - name: Restore ccache
+        uses: actions/cache/restore@v4
         with:
           path: /mnt/immortalwrt/ccache
-          key: ${{ runner.os }}-ccache-${{ hashFiles(env.CONFIG_FILE) }}
-          restore-keys: ${{ runner.os }}-ccache-
+          key: ${{ runner.os }}-immortalwrt-ccache-${{ hashFiles(env.CONFIG_FILE) }}
+          restore-keys: |
+            ${{ runner.os }}-immortalwrt-ccache-
 
       - name: Setup ccache
         run: |
@@ -104,6 +109,14 @@ jobs:
           make download -j$(nproc)
           find dl -size -1024c -delete 2>/dev/null || true
 
+      # ---------- dl 缓存：保存（下载后） ----------
+      - name: Save dl cache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: /mnt/immortalwrt/dl
+          key: ${{ runner.os }}-immortalwrt-dl-${{ hashFiles('immortalwrt/feeds.conf.default') }}
+
       - name: Compile firmware
         id: compile
         working-directory: ./immortalwrt
@@ -125,6 +138,14 @@ jobs:
             exit 1
           fi
           echo "FIRMWARE_DIR=$FIRMWARE_DIR" >> $GITHUB_ENV
+
+      # ---------- ccache 缓存：保存（编译后） ----------
+      - name: Save ccache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: /mnt/immortalwrt/ccache
+          key: ${{ runner.os }}-immortalwrt-ccache-${{ hashFiles(env.CONFIG_FILE) }}
 
       - name: Show ccache stats
         run: ccache -s
