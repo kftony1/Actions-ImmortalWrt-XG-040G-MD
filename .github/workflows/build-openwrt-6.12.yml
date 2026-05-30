@@ -1,0 +1,61 @@
+name: Build Official OpenWrt (Kernel 6.12) with xiangtailiang patches
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout your repository
+        uses: actions/checkout@v4
+        with:
+          path: myrepo
+
+      - name: Clone official OpenWrt (main branch, kernel 6.12)
+        run: |
+          git clone https://github.com/openwrt/openwrt.git openwrt
+          cd openwrt
+          git checkout main
+
+      - name: Clone xiangtailiang/openwrt for patches (target/linux/airoha)
+        run: |
+          git clone --depth 1 https://github.com/xiangtailiang/openwrt.git xiang-repo
+          cp -rf xiang-repo/target/linux/airoha openwrt/target/linux/
+
+      - name: Extract your custom overlay (XG-040G-MD.tar.gz with full paths)
+        run: |
+          cd openwrt
+          tar -xzf ../myrepo/XG-040G-MD.tar.gz
+          # 可选：列出覆盖的关键文件便于调试
+          echo "=== Custom DTS files ==="
+          ls -la target/linux/airoha/dts/ 2>/dev/null || echo "No custom DTS"
+          echo "=== Custom files overlay ==="
+          find files -type f 2>/dev/null | head -10 || echo "No files overlay"
+
+      - name: Use your openwrt.config
+        run: |
+          cp myrepo/openwrt.config openwrt/.config
+
+      - name: Update feeds and run defconfig
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          make defconfig
+
+      - name: Download all source packages
+        run: |
+          cd openwrt
+          make download -j8
+
+      - name: Compile firmware
+        run: |
+          cd openwrt
+          make -j$(nproc)
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-6.12-xg-040g-md
+          path: openwrt/bin/targets/airoha/an7581/
