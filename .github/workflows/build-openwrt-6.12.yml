@@ -27,7 +27,6 @@ jobs:
         run: |
           cd openwrt
           tar -xzf ../myrepo/XG-040G-MD.tar.gz
-          # 可选：列出覆盖的关键文件便于调试
           echo "=== Custom DTS files ==="
           ls -la target/linux/airoha/dts/ 2>/dev/null || echo "No custom DTS"
           echo "=== Custom files overlay ==="
