@@ -171,27 +171,19 @@ jobs:
           make download -j4 V=s
           find dl -size -1024c -delete
 
+      # ========== 修改点：强制单线程 + 详细日志 ==========
       - name: Compile OpenWrt firmware
         id: compile
         run: |
           cd openwrt
           echo "Disk usage before compile:"
           df -h
-          if [[ "${{ inputs.log_switch }}" == "true" ]]; then
-            make -j1 V=s || {
-              echo "Compile failed, disk usage diagnostics:"
-              df -h
-              du -h -d1 . | sort -h | tail -n 30
-              exit 1
-            }
-          else
-            make -j$(nproc) || {
-              echo "Compile failed, disk usage diagnostics:"
-              df -h
-              du -h -d1 . | sort -h | tail -n 30
-              exit 1
-            }
-          fi
+          make -j1 V=s || {
+            echo "Compile failed, disk usage diagnostics:"
+            df -h
+            du -h -d1 . | sort -h | tail -n 30
+            exit 1
+          }
           DEVICE_NAME=$(grep -o 'CONFIG_TARGET.*DEVICE_[^=]*=y' .config | head -1 | sed 's/.*DEVICE_\(.*\)=y/\1/')
           if [[ -n "$DEVICE_NAME" ]]; then
             echo "DEVICE_NAME=_${DEVICE_NAME}" >> "$GITHUB_ENV"
@@ -200,6 +192,7 @@ jobs:
           echo "status=success" >> $GITHUB_OUTPUT
           echo "ccache stats (env CCACHE_DIR=$CCACHE_DIR):"
           ccache -s || true
+      # ================================================
 
       - name: Save ccache
         uses: actions/cache/save@v4
