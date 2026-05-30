@@ -28,19 +28,43 @@ jobs:
           cd openwrt
           tar -xzf ../myrepo/XG-040G-MD.tar.gz
 
-      - name: Apply kernel patch for FudanMicro FM25G02B
+      - name: Prepare kernel source
         run: |
           cd openwrt
-          PATCH_FILE="../myrepo/patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch"
-          if [ ! -f "$PATCH_FILE" ]; then
-            echo "ERROR: Patch file not found!"
+          make target/linux/prepare
+          # 查找内核源码目录（通常在 build_dir/target-*/linux-*）
+          KERNEL_DIR=$(find build_dir/target-* -name "linux-*" -type d | head -1)
+          if [ -z "$KERNEL_DIR" ]; then
+            echo "ERROR: Kernel source directory not found!"
             exit 1
           fi
-          echo "Applying FMSH driver patch"
+          echo "KERNEL_DIR=$KERNEL_DIR" >> $GITHUB_ENV
+          echo "Kernel source prepared at $KERNEL_DIR"
+
+      - name: Apply kernel patch for FudanMicro FM25G02B
+        run: |
+          cd "${{ env.KERNEL_DIR }}"
+          if [ -z "$PWD" ]; then
+            echo "ERROR: Kernel directory not set"
+            exit 1
+          fi
+          echo "Working in kernel directory: $PWD"
+          
+          # 配置 git 用户信息（内核目录是一个 git 仓库）
+          git config user.email "runner@openwrt.org"
+          git config user.name "OpenWrt Runner"
+          
+          PATCH_FILE="${{ github.workspace }}/myrepo/patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch"
+          if [ ! -f "$PATCH_FILE" ]; then
+            echo "ERROR: Patch file not found at $PATCH_FILE"
+            exit 1
+          fi
+          
           if [ -f drivers/mtd/nand/spi/fmsh.c ]; then
             echo "fmsh.c already exists, skipping patch"
           else
-            # Try git am first
+            echo "Applying FMSH driver patch"
+            # 尝试 git am
             if git am --whitespace=fix < "$PATCH_FILE"; then
               echo "git am succeeded"
             else
@@ -50,7 +74,6 @@ jobs:
                 echo "ERROR: Failed to apply patch"
                 exit 1
               fi
-              # patch doesn't create a commit, so we add and commit
               git add drivers/mtd/nand/spi/
               git commit -m "Apply FMSH driver patch via patch command"
             fi
@@ -58,7 +81,7 @@ jobs:
 
       - name: Verify FMSH driver patch applied
         run: |
-          cd openwrt
+          cd "${{ env.KERNEL_DIR }}"
           if grep -q "fmsh_spinand_manufacturer" drivers/mtd/nand/spi/core.c; then
             echo "✅ FMSH driver successfully integrated"
           else
