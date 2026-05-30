@@ -31,12 +31,39 @@ jobs:
       - name: Apply kernel patch for FudanMicro FM25G02B
         run: |
           cd openwrt
-          if [ -f ../myrepo/patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch ]; then
-            echo "Applying FMSH driver patch"
-            git am < ../myrepo/patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch || \
-              echo "Patch may already be applied; continuing"
+          PATCH_FILE="../myrepo/patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch"
+          if [ ! -f "$PATCH_FILE" ]; then
+            echo "ERROR: Patch file not found!"
+            exit 1
+          fi
+          echo "Applying FMSH driver patch"
+          if [ -f drivers/mtd/nand/spi/fmsh.c ]; then
+            echo "fmsh.c already exists, skipping patch"
           else
-            echo "Patch not found, skipping"
+            # Try git am first
+            if git am --whitespace=fix < "$PATCH_FILE"; then
+              echo "git am succeeded"
+            else
+              echo "git am failed, trying patch -p1"
+              patch -p1 < "$PATCH_FILE"
+              if [ $? -ne 0 ]; then
+                echo "ERROR: Failed to apply patch"
+                exit 1
+              fi
+              # patch doesn't create a commit, so we add and commit
+              git add drivers/mtd/nand/spi/
+              git commit -m "Apply FMSH driver patch via patch command"
+            fi
+          fi
+
+      - name: Verify FMSH driver patch applied
+        run: |
+          cd openwrt
+          if grep -q "fmsh_spinand_manufacturer" drivers/mtd/nand/spi/core.c; then
+            echo "✅ FMSH driver successfully integrated"
+          else
+            echo "❌ FMSH driver NOT found in core.c"
+            exit 1
           fi
 
       - name: Use your openwrt.config
