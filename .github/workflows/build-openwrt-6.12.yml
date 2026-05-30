@@ -72,6 +72,17 @@ jobs:
             echo "⚠️ XG-040G-MD.tar.gz not found, skipping"
           fi
 
+      - name: Copy FMSH patch to kernel patches directory (auto-applied during build)
+        run: |
+          PATCH_FILE="myrepo/patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch"
+          if [ ! -f "$PATCH_FILE" ]; then
+            echo "ERROR: Patch file not found at $PATCH_FILE"
+            exit 1
+          fi
+          mkdir -p openwrt/target/linux/airoha/patches-6.12
+          cp "$PATCH_FILE" openwrt/target/linux/airoha/patches-6.12/0400-fmsh-driver.patch
+          echo "✅ FMSH patch copied to openwrt/target/linux/airoha/patches-6.12/"
+
       - name: Move build dirs to /mnt/openwrt
         run: |
           sudo mkdir -p /mnt/openwrt/{dl,staging_dir,build_dir,ccache}
@@ -116,57 +127,6 @@ jobs:
         run: |
           make download -j8
           find dl -size -1024c -delete
-
-      - name: Prepare kernel source
-        working-directory: ./openwrt
-        run: |
-          make target/linux/prepare
-          KERNEL_DIR=$(find build_dir/target-* -name "linux-*" -type d | head -1)
-          if [ -z "$KERNEL_DIR" ]; then
-            echo "ERROR: Kernel source directory not found!"
-            exit 1
-          fi
-          echo "KERNEL_DIR=$KERNEL_DIR" >> $GITHUB_ENV
-          echo "Kernel source prepared at $KERNEL_DIR"
-
-      - name: Apply FudanMicro (FMSH) flash driver patch
-        run: |
-          cd "${{ env.KERNEL_DIR }}"
-          # Configure git for kernel source (it's a git repo)
-          git config user.email "runner@openwrt.org"
-          git config user.name "OpenWrt Runner"
-          PATCH_FILE="${{ github.workspace }}/myrepo/patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch"
-          if [ ! -f "$PATCH_FILE" ]; then
-            echo "ERROR: Patch file not found at $PATCH_FILE"
-            exit 1
-          fi
-          if [ -f drivers/mtd/nand/spi/fmsh.c ]; then
-            echo "fmsh.c already exists, skipping patch"
-          else
-            echo "Applying FMSH driver patch"
-            if git am --whitespace=fix < "$PATCH_FILE"; then
-              echo "git am succeeded"
-            else
-              echo "git am failed, trying patch -p1"
-              patch -p1 < "$PATCH_FILE"
-              if [ $? -ne 0 ]; then
-                echo "ERROR: Failed to apply patch"
-                exit 1
-              fi
-              git add drivers/mtd/nand/spi/
-              git commit -m "Apply FMSH driver patch"
-            fi
-          fi
-
-      - name: Verify FMSH driver integrated
-        run: |
-          cd "${{ env.KERNEL_DIR }}"
-          if grep -q "fmsh_spinand_manufacturer" drivers/mtd/nand/spi/core.c; then
-            echo "✅ FMSH driver successfully integrated"
-          else
-            echo "❌ FMSH driver NOT found in core.c"
-            exit 1
-          fi
 
       - name: Compile OpenWrt firmware
         id: compile
@@ -221,7 +181,7 @@ jobs:
           构建时间: $(date +"%Y-%m-%d %H:%M")
           内核版本: 6.12 (main branch)
           源码仓库: openwrt/openwrt
-          复旦微闪存补丁: 已集成
+          复旦微闪存补丁: 已集成 (patches-6.12)
           EOF
 
       - name: Publish GitHub Release
