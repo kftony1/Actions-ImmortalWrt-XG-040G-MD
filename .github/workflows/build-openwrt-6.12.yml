@@ -1,4 +1,4 @@
-name: Build Official OpenWrt with FMSH patch for XG-040G-MD
+name: Build Official OpenWrt for XG-040G-MD
 
 on:
   workflow_dispatch:
@@ -11,9 +11,9 @@ on:
 
 env:
   CONFIG_FILE: "openwrt.config"
+  FEEDS_CONF: "feeds.conf.default"
   REPO_URL: https://github.com/openwrt/openwrt.git
   REPO_BRANCH: main
-  FEEDS_CONF: feeds.conf.default
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   KEEP_RELEASES: 20
@@ -26,7 +26,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout your repository (with patches and configs)
+      - name: Checkout your repository
         uses: actions/checkout@v4
         with:
           path: myrepo
@@ -37,9 +37,6 @@ jobs:
           tool-cache: true
           android: true
           dotnet: true
-
-      - name: Space usage check
-        run: df -h
 
       - name: Setup environment dependencies
         run: |
@@ -65,23 +62,19 @@ jobs:
       - name: Extract your custom overlay (XG-040G-MD.tar.gz)
         run: |
           if [ -f "myrepo/XG-040G-MD.tar.gz" ]; then
-            echo "📦 Extracting XG-040G-MD.tar.gz to openwrt/"
             tar -xzf myrepo/XG-040G-MD.tar.gz -C openwrt/
-            echo "✅ Configuration extracted"
           else
-            echo "⚠️ XG-040G-MD.tar.gz not found, skipping"
+            echo "⚠️ XG-040G-MD.tar.gz not found"
           fi
 
-      - name: Copy FMSH patch to kernel patches directory (auto-applied during build)
+      - name: Copy custom feeds.conf.default
         run: |
-          PATCH_FILE="myrepo/patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch"
-          if [ ! -f "$PATCH_FILE" ]; then
-            echo "ERROR: Patch file not found at $PATCH_FILE"
-            exit 1
+          if [ -f "myrepo/feeds.conf.default" ]; then
+            cp myrepo/feeds.conf.default openwrt/feeds.conf.default
+            echo "✅ Custom feeds.conf.default copied"
+          else
+            echo "⚠️ Using default feeds.conf from openwrt"
           fi
-          mkdir -p openwrt/target/linux/airoha/patches-6.12
-          cp "$PATCH_FILE" openwrt/target/linux/airoha/patches-6.12/0400-fmsh-driver.patch
-          echo "✅ FMSH patch copied to openwrt/target/linux/airoha/patches-6.12/"
 
       - name: Move build dirs to /mnt/openwrt
         run: |
@@ -132,19 +125,16 @@ jobs:
         id: compile
         run: |
           cd openwrt
-          echo "Disk usage before compile:"
-          df -h
           if [[ "${{ inputs.log_switch }}" == "true" ]]; then
-            make -j1 V=s || { echo "Compile failed"; exit 1; }
+            make -j1 V=s
           else
-            make -j$(nproc) || { echo "Compile failed"; exit 1; }
+            make -j$(nproc)
           fi
-          DEVICE_NAME=$(grep -o 'CONFIG_TARGET.*DEVICE_[^=]*=y' .config | head -1 | sed 's/.*DEVICE_\(.*\)=y/\1/')
+          DEVICE_NAME=$(grep -o 'CONFIG_TARGET.*DEVICE_[^=]*=y' .config | head -1 | sed 's/.*DEVICE_\(.*\)=y/\1/' || true)
           if [[ -n "$DEVICE_NAME" ]]; then
             echo "DEVICE_NAME=_${DEVICE_NAME}" >> $GITHUB_ENV
           fi
           echo "FILE_DATE=_$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
-          echo "status=success" >> $GITHUB_OUTPUT
           ccache -s || true
 
       - name: Save ccache
@@ -175,13 +165,13 @@ jobs:
         run: |
           echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
           cat <<EOF > release.txt
-          🚀 Official OpenWrt with FMSH flash driver for XG-040G-MD
+          🚀 Official OpenWrt for XG-040G-MD
           ----------------------
           设备型号: XG-040G-MD
           构建时间: $(date +"%Y-%m-%d %H:%M")
           内核版本: 6.12 (main branch)
           源码仓库: openwrt/openwrt
-          复旦微闪存补丁: 已集成 (patches-6.12)
+          平台补丁: xiangtailiang/airoha
           EOF
 
       - name: Publish GitHub Release
