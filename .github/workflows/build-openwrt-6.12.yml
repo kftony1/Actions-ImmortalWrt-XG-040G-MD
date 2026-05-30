@@ -1,4 +1,4 @@
-name: Build Official OpenWrt (Kernel 6.12) with xiangtailiang patches
+name: Build Official OpenWrt (Kernel 6.12) with xiangtailiang patches + FMSH driver
 
 on:
   workflow_dispatch:
@@ -23,20 +23,27 @@ jobs:
           git clone --depth 1 https://github.com/xiangtailiang/openwrt.git xiang-repo
           cp -rf xiang-repo/target/linux/airoha openwrt/target/linux/
 
-      - name: Extract your custom overlay (XG-040G-MD.tar.gz with full paths)
+      - name: Extract your custom overlay (XG-040G-MD.tar.gz)
         run: |
           cd openwrt
           tar -xzf ../myrepo/XG-040G-MD.tar.gz
-          echo "=== Custom DTS files ==="
-          ls -la target/linux/airoha/dts/ 2>/dev/null || echo "No custom DTS"
-          echo "=== Custom files overlay ==="
-          find files -type f 2>/dev/null | head -10 || echo "No files overlay"
+
+      - name: Apply kernel patch for FudanMicro FM25G02B
+        run: |
+          cd openwrt
+          if [ -f ../myrepo/patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch ]; then
+            echo "Applying FMSH driver patch"
+            git am < ../myrepo/patches/0400-full-fmsh-driver-with-fm25g02b-fix.patch || \
+              echo "Patch may already be applied; continuing"
+          else
+            echo "Patch not found, skipping"
+          fi
 
       - name: Use your openwrt.config
         run: |
           cp myrepo/openwrt.config openwrt/.config
 
-      - name: Update feeds and run defconfig
+      - name: Update feeds and defconfig
         run: |
           cd openwrt
           ./scripts/feeds update -a
