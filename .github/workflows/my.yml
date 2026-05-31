@@ -1,0 +1,147 @@
+name: Build OpenWrt with AN7581 full support
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+env:
+  OPENWRT_REPO: https://git.openwrt.org/openwrt/openwrt.git
+  OPENWRT_BRANCH: main
+  XT_REPO: https://github.com/xiangtailiang/openwrt.git
+  XT_BRANCH: feat/xg040-adaptation-patch
+  CONFIG_FILE: openwrt.config
+  TARBALL: XG-040G-MD.tar.gz
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout your repository
+        uses: actions/checkout@v4
+        with:
+          path: myfiles
+
+      - name: Checkout OpenWrt official source
+        uses: actions/checkout@v4
+        with:
+          repository: openwrt/openwrt
+          ref: ${{ env.OPENWRT_BRANCH }}
+          path: openwrt
+
+      - name: Checkout xiangtailiang repository
+        uses: actions/checkout@v4
+        with:
+          repository: xiangtailiang/openwrt
+          ref: ${{ env.XT_BRANCH }}
+          path: xiangtailiang
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc
+          sudo apt clean
+
+      - name: Install build dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential libncurses5-dev zlib1g-dev gawk git ccache rsync python3 python3-distutils file bc bison flex cpio unzip
+
+      - name: Cache ccache
+        uses: actions/cache@v3
+        with:
+          path: ~/.ccache
+          key: ${{ runner.os }}-ccache-${{ github.run_id }}
+          restore-keys: ${{ runner.os }}-ccache-
+
+      - name: Cache dl
+        uses: actions/cache@v3
+        with:
+          path: openwrt/dl
+          key: ${{ runner.os }}-dl-${{ hashFiles('openwrt/feeds.conf.default') }}
+          restore-keys: ${{ runner.os }}-dl-
+
+      - name: Cache feeds
+        uses: actions/cache@v3
+        with:
+          path: openwrt/feeds
+          key: ${{ runner.os }}-feeds-${{ hashFiles('openwrt/feeds.conf.default') }}
+          restore-keys: ${{ runner.os }}-feeds-
+
+      - name: Extract AN7581 drivers, patches and firmware
+        run: |
+          XT_AIROHA="xiangtailiang/target/linux/airoha"
+          OPENWRT_AIROHA="openwrt/target/linux/airoha"
+          XT_GENERIC_PATCH="xiangtailiang/target/linux/generic/hack-6.12"
+          OPENWRT_GENERIC_PATCH="openwrt/target/linux/generic/hack-6.12"
+          XT_PKG_KERNEL="xiangtailiang/package/kernel"
+          OPENWRT_PKG_KERNEL="openwrt/package/kernel"
+          XT_PKG_FIRMWARE="xiangtailiang/package/firmware"
+          OPENWRT_PKG_FIRMWARE="openwrt/package/firmware"
+
+          if [ -d "$XT_AIROHA" ]; then
+            cp -rf $XT_AIROHA/. $OPENWRT_AIROHA/
+          fi
+
+          mkdir -p $OPENWRT_GENERIC_PATCH
+          if ls $XT_GENERIC_PATCH/*.patch 1>/dev/null 2>&1; then
+            cp -f $XT_GENERIC_PATCH/*.patch $OPENWRT_GENERIC_PATCH/
+          else
+            echo "No patch files found in $XT_GENERIC_PATCH"
+          fi
+
+          if ls $XT_PKG_KERNEL/airoha* 1>/dev/null 2>&1; then
+            cp -rf $XT_PKG_KERNEL/airoha* $OPENWRT_PKG_KERNEL/
+          fi
+
+          if [ -d "$XT_PKG_FIRMWARE" ]; then
+            find $XT_PKG_FIRMWARE -maxdepth 1 -type d -name "airoha-*" -exec cp -rf {} $OPENWRT_PKG_FIRMWARE/ \;
+          fi
+
+      - name: Setup ccache
+        run: |
+          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
+          echo "PATH=/usr/lib/ccache:$PATH" >> $GITHUB_ENV
+
+      - name: Use your openwrt.config
+        run: cp myfiles/${{ env.CONFIG_FILE }} openwrt/.config
+
+      - name: Extract your XG-040G-MD.tar.gz
+        run: tar -xzf myfiles/${{ env.TARBALL }} -C openwrt/
+
+      - name: Update feeds
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Configure build
+        run: |
+          cd openwrt
+          make defconfig
+          make diffconfig
+
+      - name: Download sources (with retry)
+        run: |
+          cd openwrt
+          for i in 1 2 3 4 5; do
+            make download -j1 && break
+            echo "Download failed, retrying in 60s..."
+            sleep 60
+          done
+
+      - name: Build firmware
+        run: |
+          cd openwrt
+          make -j1 V=s
+
+      - name: List artifacts
+        run: find openwrt/bin/targets -name "*.bin" -o -name "*.img" -o -name "*.tar.gz"
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-firmware
+          path: |
+            openwrt/bin/targets/airoha/*/*.bin
+            openwrt/bin/targets/airoha/*/*.img
+            openwrt/bin/targets/airoha/*/*.tar.gz
