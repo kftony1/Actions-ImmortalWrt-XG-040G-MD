@@ -27,12 +27,19 @@ jobs:
           ref: ${{ env.OPENWRT_BRANCH }}
           path: openwrt
 
-      - name: Checkout xiangtailiang repository
-        uses: actions/checkout@v4
-        with:
-          repository: xiangtailiang/openwrt
-          ref: ${{ env.XT_BRANCH }}
-          path: xiangtailiang
+      - name: Checkout xiangtailiang repository (shallow + retry)
+        run: |
+          for i in 1 2 3 4 5; do
+            echo "Attempt $i: cloning ${{ env.XT_REPO }} branch ${{ env.XT_BRANCH }}"
+            rm -rf xiangtailiang
+            if git clone --depth 1 --branch ${{ env.XT_BRANCH }} ${{ env.XT_REPO }} xiangtailiang; then
+              echo "Clone succeeded"
+              exit 0
+            fi
+            echo "Clone failed, waiting 30s..."
+            sleep 30
+          done
+          echo "All retries failed" && exit 1
 
       - name: Free disk space
         run: |
@@ -48,7 +55,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ~/.ccache
-          key: ${{ runner.os }}-ccache-${{ github.run_id }}
+          key: ${{ runner.os }}-ccache-${{ github.ref_name }}
           restore-keys: ${{ runner.os }}-ccache-
 
       - name: Cache dl
@@ -76,11 +83,13 @@ jobs:
           XT_PKG_FIRMWARE="xiangtailiang/package/firmware"
           OPENWRT_PKG_FIRMWARE="openwrt/package/firmware"
 
+          # Ensure target directories exist
+          mkdir -p $OPENWRT_AIROHA $OPENWRT_GENERIC_PATCH $OPENWRT_PKG_KERNEL $OPENWRT_PKG_FIRMWARE
+
           if [ -d "$XT_AIROHA" ]; then
             cp -rf $XT_AIROHA/. $OPENWRT_AIROHA/
           fi
 
-          mkdir -p $OPENWRT_GENERIC_PATCH
           if ls $XT_GENERIC_PATCH/*.patch 1>/dev/null 2>&1; then
             cp -f $XT_GENERIC_PATCH/*.patch $OPENWRT_GENERIC_PATCH/
           else
