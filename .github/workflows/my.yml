@@ -2,8 +2,6 @@ name: Build OpenWrt with AN7581 full support
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
 
 env:
   OPENWRT_REPO: https://git.openwrt.org/openwrt/openwrt.git
